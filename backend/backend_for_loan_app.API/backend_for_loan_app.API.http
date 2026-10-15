@@ -1,0 +1,6 @@
+@backend_for_loan_app.API_HostAddress = http://localhost:5087
+
+GET {{backend_for_loan_app.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

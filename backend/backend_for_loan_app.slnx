@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="backend_for_loan_app.API/backend_for_loan_app.API.csproj" />
+  <Project Path="backend_for_loan_app.Application/backend_for_loan_app.Application.csproj" />
+  <Project Path="backend_for_loan_app.Domain/backend_for_loan_app.Domain.csproj" />
+  <Project Path="backend_for_loan_app.Infrastructure/backend_for_loan_app.Infrastructure.csproj" />
+  <Project Path="backend_for_loan_app.Tests/backend_for_loan_app.Tests.csproj" />
+</Solution>

@@ -1,0 +1,75 @@
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.nosync
+*.nosync/
+.nosync
+
+# Binary Outputs & Installers
+*.apk
+*.aab
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+
+# .NET / C#
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dbmdl
+*.jfm
+.vs/
+TestResults/
+
+# Flutter / Dart
+.dart_tool
+.dart_tool/
+.dart_tool.nosync
+.dart_tool.nosync/
+.flutter-plugins
+.flutter-plugins-dependencies*
+.packages
+.pub-cache/
+.pub/
+build
+build/
+build*/
+build.nosync
+build.nosync/
+coverage/
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated*.xcconfig
+**/ios/Flutter/flutter_export_environment*.sh
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/android/.gradle
+**/android/captures/
+**/android/gradle/
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+
+# IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# Backups & Logs
+*.log
+DatabaseBackups/*.enc
+DatabaseBackups/*.sql
