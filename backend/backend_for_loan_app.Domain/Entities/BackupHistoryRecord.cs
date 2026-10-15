@@ -16,4 +16,5 @@ public class BackupHistoryRecord
     public string TriggerType { get; set; } = "Scheduled"; // Scheduled, Manual, PreRestoreSnapshot
     public string? CreatedBy { get; set; }
     public DateTime? RestoredAt { get; set; }
+    public string? EncryptedData { get; set; }
 }

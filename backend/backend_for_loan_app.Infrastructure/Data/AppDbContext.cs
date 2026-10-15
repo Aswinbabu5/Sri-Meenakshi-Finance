@@ -79,6 +79,7 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(e => e.Sha256Checksum).HasMaxLength(100);
             entity.Property(e => e.TriggerType).HasMaxLength(50);
             entity.Property(e => e.CreatedBy).HasMaxLength(100);
+            entity.Property(e => e.EncryptedData).HasColumnType("LONGTEXT");
         });
 
         modelBuilder.Entity<RestoreHistoryRecord>(entity =>

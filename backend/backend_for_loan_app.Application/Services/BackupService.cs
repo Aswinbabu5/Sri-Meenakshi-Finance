@@ -83,9 +83,10 @@ public class BackupService : IBackupService
             // 3. Encrypt backup at rest using AES-256
             var encryptedBytes = EncryptAes256(dumpBytes, _options.EncryptionKey);
 
-            // 4. Save to dedicated primary storage location
+            // 4. Save to dedicated primary storage location and persist in database
             await File.WriteAllBytesAsync(filePath, encryptedBytes, cancellationToken);
             record.SizeBytes = new FileInfo(filePath).Length;
+            record.EncryptedData = Convert.ToBase64String(encryptedBytes);
 
             // 5. Mirror to secondary storage location if configured
             if (!string.IsNullOrWhiteSpace(_options.SecondaryStoragePath))
@@ -171,15 +172,25 @@ public class BackupService : IBackupService
         var record = await _context.BackupHistories.FirstOrDefaultAsync(b => b.BackupId == backupId, cancellationToken);
         if (record == null) throw new KeyNotFoundException($"Backup with ID '{backupId}' not found.");
 
-        if (!File.Exists(record.StorageLocation))
+        byte[]? encryptedBytes = null;
+        if (File.Exists(record.StorageLocation))
+        {
+            encryptedBytes = await File.ReadAllBytesAsync(record.StorageLocation, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(record.EncryptedData))
+        {
+            encryptedBytes = Convert.FromBase64String(record.EncryptedData);
+        }
+
+        if (encryptedBytes == null || encryptedBytes.Length == 0)
         {
             record.ValidationStatus = "Failed";
-            record.ErrorMessage = "Backup file not found on disk.";
+            record.ErrorMessage = "Backup file not found on disk or cloud storage.";
             await _context.SaveChangesAsync(cancellationToken);
             return false;
         }
 
-        var isValid = await ValidateBackupFileInternalAsync(record.StorageLocation, record.Sha256Checksum, _options.EncryptionKey, cancellationToken);
+        var isValid = ValidateBackupBytesInternal(encryptedBytes, record.Sha256Checksum, _options.EncryptionKey);
         record.ValidationStatus = isValid ? "Verified" : "Failed";
         await _context.SaveChangesAsync(cancellationToken);
         return isValid;
@@ -223,19 +234,35 @@ public class BackupService : IBackupService
 
             restoreRecord.BackupFilename = targetBackup.Filename;
 
-            if (!File.Exists(targetBackup.StorageLocation))
+            byte[] encryptedBytes;
+            if (File.Exists(targetBackup.StorageLocation))
             {
-                throw new FileNotFoundException($"Backup physical file not found at {targetBackup.StorageLocation}");
+                encryptedBytes = await File.ReadAllBytesAsync(targetBackup.StorageLocation, cancellationToken);
+            }
+            else if (!string.IsNullOrWhiteSpace(targetBackup.EncryptedData))
+            {
+                // Restore from cloud database persistent payload
+                encryptedBytes = Convert.FromBase64String(targetBackup.EncryptedData);
+                try
+                {
+                    var dir = Path.GetDirectoryName(targetBackup.StorageLocation);
+                    if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+                    await File.WriteAllBytesAsync(targetBackup.StorageLocation, encryptedBytes, cancellationToken);
+                }
+                catch { /* Ignore local cache file write error */ }
+            }
+            else
+            {
+                throw new FileNotFoundException($"The physical file for backup '{backupId}' is not found on this server instance (it was created before cloud persistence was enabled). Please run 'Run Backup Now' to create a new persistent backup.");
             }
 
             _logger.LogInformation("Validating backup {BackupId} integrity before restoration...", backupId);
 
             // Step 1: Pre-validation of backup
-            var isValid = await ValidateBackupFileInternalAsync(
-                targetBackup.StorageLocation,
+            var isValid = ValidateBackupBytesInternal(
+                encryptedBytes,
                 targetBackup.Sha256Checksum,
-                _options.EncryptionKey,
-                cancellationToken
+                _options.EncryptionKey
             );
 
             if (!isValid)
@@ -266,7 +293,6 @@ public class BackupService : IBackupService
             restoreRecord.PreRestoreBackupId = preRestoreBackupId;
 
             // Step 3: Decrypt and execute restore SQL script
-            var encryptedBytes = await File.ReadAllBytesAsync(targetBackup.StorageLocation, cancellationToken);
             var dumpBytes = DecryptAes256(encryptedBytes, _options.EncryptionKey);
             var sqlScript = Encoding.UTF8.GetString(dumpBytes);
 
@@ -409,8 +435,6 @@ public class BackupService : IBackupService
         sb.AppendLine($"-- Application: Sri Meenakshi Finance Loan Management System");
         sb.AppendLine("-- ========================================================");
         sb.AppendLine("SET FOREIGN_KEY_CHECKS = 0;");
-        sb.AppendLine("SET AUTOCOMMIT = 0;");
-        sb.AppendLine("START TRANSACTION;");
         sb.AppendLine();
 
         // Get database connection
@@ -421,19 +445,20 @@ public class BackupService : IBackupService
         try
         {
             var tableNames = new List<string>();
+            var systemTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "backuphistories",
+                "restorehistories",
+                "__efmigrationshistory"
+            };
 
             // Query existing tables
             using (var cmd = connection.CreateCommand())
             {
                 var isMySql = connection.GetType().Name.Contains("MySql", StringComparison.OrdinalIgnoreCase);
-                if (isMySql)
-                {
-                    cmd.CommandText = "SHOW TABLES;";
-                }
-                else
-                {
-                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';";
-                }
+                cmd.CommandText = isMySql
+                    ? "SHOW TABLES;"
+                    : "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';";
 
                 try
                 {
@@ -441,7 +466,7 @@ public class BackupService : IBackupService
                     while (await reader.ReadAsync(cancellationToken))
                     {
                         var name = reader.GetString(0);
-                        if (!tableNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        if (!systemTables.Contains(name) && !tableNames.Contains(name, StringComparer.OrdinalIgnoreCase))
                         {
                             tableNames.Add(name);
                         }
@@ -450,85 +475,70 @@ public class BackupService : IBackupService
                 catch
                 {
                     // Fallback to EF Core Model entities
-                    var entityTypes = _context.Database.ProviderName != null
-                        ? new[] { "collectionlines", "customers", "loans", "dailycollections", "backuphistories", "restorehistories" }
-                        : Array.Empty<string>();
-                    tableNames.AddRange(entityTypes);
+                    tableNames.AddRange(new[] { "collectionlines", "customers", "loans", "dailycollections" });
                 }
             }
 
-            // Dump each table: DDL (CREATE TABLE) and Rows (INSERT INTO)
-            foreach (var table in tableNames)
+            var orderedTables = SortTablesByDependency(tableNames);
+
+            // Step A: Clear existing data in reverse dependency order
+            sb.AppendLine("-- Step 1: Clear existing data in reverse dependency order");
+            for (int i = orderedTables.Count - 1; i >= 0; i--)
+            {
+                sb.AppendLine($"DELETE FROM `{orderedTables[i]}`;");
+            }
+            sb.AppendLine();
+
+            // Step B: Dump Table Data Rows in forward dependency order
+            sb.AppendLine("-- Step 2: Insert table data in forward dependency order");
+            foreach (var table in orderedTables)
             {
                 sb.AppendLine($"-- --------------------------------------------------------");
-                sb.AppendLine($"-- Table structure and data for `{table}`");
+                sb.AppendLine($"-- Table data for `{table}`");
                 sb.AppendLine($"-- --------------------------------------------------------");
 
-                // Get table DDL if MySQL supports SHOW CREATE TABLE
+                using var selectCmd = connection.CreateCommand();
+                selectCmd.CommandText = $"SELECT * FROM `{table}`;";
                 try
                 {
-                    using var ddlCmd = connection.CreateCommand();
-                    ddlCmd.CommandText = $"SHOW CREATE TABLE `{table}`;";
-                    using var ddlReader = await ddlCmd.ExecuteReaderAsync(cancellationToken);
-                    if (await ddlReader.ReadAsync(cancellationToken) && ddlReader.FieldCount >= 2)
+                    using var dataReader = await selectCmd.ExecuteReaderAsync(cancellationToken);
+                    var columnCount = dataReader.FieldCount;
+                    var colNames = new List<string>();
+                    for (int i = 0; i < columnCount; i++)
                     {
-                        var createSql = ddlReader.GetString(1);
-                        sb.AppendLine($"DROP TABLE IF EXISTS `{table}`;");
-                        sb.AppendLine(createSql + ";");
-                        sb.AppendLine();
+                        colNames.Add($"`{dataReader.GetName(i)}`");
                     }
-                }
-                catch
-                {
-                    // Fallback: Skip custom DDL, let existing schema remain or be handled
-                }
+                    var colListStr = string.Join(", ", colNames);
 
-                // Dump Table Data Rows
-                using (var selectCmd = connection.CreateCommand())
-                {
-                    selectCmd.CommandText = $"SELECT * FROM `{table}`;";
-                    try
+                    int rowCount = 0;
+                    while (await dataReader.ReadAsync(cancellationToken))
                     {
-                        using var dataReader = await selectCmd.ExecuteReaderAsync(cancellationToken);
-                        var columnCount = dataReader.FieldCount;
-                        var colNames = new List<string>();
+                        var values = new List<string>();
                         for (int i = 0; i < columnCount; i++)
                         {
-                            colNames.Add($"`{dataReader.GetName(i)}`");
-                        }
-                        var colListStr = string.Join(", ", colNames);
-
-                        int rowCount = 0;
-                        while (await dataReader.ReadAsync(cancellationToken))
-                        {
-                            var values = new List<string>();
-                            for (int i = 0; i < columnCount; i++)
+                            if (await dataReader.IsDBNullAsync(i, cancellationToken))
                             {
-                                if (await dataReader.IsDBNullAsync(i, cancellationToken))
-                                {
-                                    values.Add("NULL");
-                                }
-                                else
-                                {
-                                    var val = dataReader.GetValue(i);
-                                    values.Add(FormatSqlValue(val));
-                                }
+                                values.Add("NULL");
                             }
-
-                            sb.AppendLine($"INSERT INTO `{table}` ({colListStr}) VALUES ({string.Join(", ", values)});");
-                            rowCount++;
+                            else
+                            {
+                                var val = dataReader.GetValue(i);
+                                values.Add(FormatSqlValue(val));
+                            }
                         }
-                        sb.AppendLine($"-- Total {rowCount} rows dumped for `{table}`");
-                        sb.AppendLine();
+
+                        sb.AppendLine($"INSERT INTO `{table}` ({colListStr}) VALUES ({string.Join(", ", values)});");
+                        rowCount++;
                     }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"-- Note: Table `{table}` data dump error: {ex.Message}");
-                    }
+                    sb.AppendLine($"-- Total {rowCount} rows dumped for `{table}`");
+                    sb.AppendLine();
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"-- Note: Table `{table}` data dump error: {ex.Message}");
                 }
             }
 
-            sb.AppendLine("COMMIT;");
             sb.AppendLine("SET FOREIGN_KEY_CHECKS = 1;");
             sb.AppendLine("-- End of Sri Meenakshi Finance Automated Backup");
 
@@ -538,6 +548,28 @@ public class BackupService : IBackupService
         {
             if (wasClosed) await connection.CloseAsync();
         }
+    }
+
+    private static List<string> SortTablesByDependency(List<string> tables)
+    {
+        var priorityOrder = new List<string> { "collectionlines", "customers", "loans", "dailycollections" };
+        var result = new List<string>();
+
+        foreach (var p in priorityOrder)
+        {
+            var match = tables.FirstOrDefault(t => t.Equals(p, StringComparison.OrdinalIgnoreCase));
+            if (match != null) result.Add(match);
+        }
+
+        foreach (var t in tables)
+        {
+            if (!result.Contains(t, StringComparer.OrdinalIgnoreCase))
+            {
+                result.Add(t);
+            }
+        }
+
+        return result;
     }
 
     private static string FormatSqlValue(object val)
@@ -625,6 +657,38 @@ public class BackupService : IBackupService
         return statements;
     }
 
+    private static bool ValidateBackupBytesInternal(
+        byte[] encryptedBytes,
+        string expectedChecksum,
+        string encryptionKey)
+    {
+        try
+        {
+            if (encryptedBytes.Length < 16) return false;
+            var decryptedBytes = DecryptAes256(encryptedBytes, encryptionKey);
+
+            // Verify checksum
+            var computedChecksum = ComputeSha256(decryptedBytes);
+            if (!string.Equals(computedChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // Verify content structure has required SQL markers
+            var sampleText = Encoding.UTF8.GetString(decryptedBytes);
+            if (!sampleText.Contains("Sri Meenakshi Finance"))
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static Task<bool> ValidateBackupFileInternalAsync(
         string filePath,
         string expectedChecksum,
@@ -638,23 +702,7 @@ public class BackupService : IBackupService
             if (fileInfo.Length == 0) return Task.FromResult(false);
 
             var encryptedBytes = File.ReadAllBytes(filePath);
-            var decryptedBytes = DecryptAes256(encryptedBytes, encryptionKey);
-
-            // Verify checksum
-            var computedChecksum = ComputeSha256(decryptedBytes);
-            if (!string.Equals(computedChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase))
-            {
-                return Task.FromResult(false);
-            }
-
-            // Verify content structure has required SQL markers
-            var sampleText = Encoding.UTF8.GetString(decryptedBytes);
-            if (!sampleText.Contains("Sri Meenakshi Finance") || !sampleText.Contains("COMMIT;"))
-            {
-                return Task.FromResult(false);
-            }
-
-            return Task.FromResult(true);
+            return Task.FromResult(ValidateBackupBytesInternal(encryptedBytes, expectedChecksum, encryptionKey));
         }
         catch
         {

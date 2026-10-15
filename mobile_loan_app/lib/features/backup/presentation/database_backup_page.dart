@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/models/backup_model.dart';
 import '../../../../core/services/backup_api_service.dart';
@@ -62,11 +63,29 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = _parseErrorMessage(e);
           _isLoading = false;
         });
       }
     }
+  }
+
+  String _parseErrorMessage(dynamic e) {
+    if (e is DioException) {
+      final responseData = e.response?.data;
+      if (responseData is Map) {
+        final msg = responseData['message'] ?? responseData['errorMessage'] ?? responseData['error'] ?? responseData['title'];
+        if (msg != null && msg.toString().trim().isNotEmpty) {
+          return msg.toString().trim();
+        }
+      } else if (responseData is String && responseData.trim().isNotEmpty) {
+        return responseData.trim();
+      }
+      if (e.message != null && e.message!.isNotEmpty) {
+        return e.message!;
+      }
+    }
+    return e.toString();
   }
 
   Future<void> _handleCreateBackup() async {
@@ -106,7 +125,9 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             content: Text(
-              widget.repository.isTamil ? 'காப்பு தோல்வியடைந்தது: $e' : 'Backup creation failed: $e',
+              widget.repository.isTamil
+                  ? 'காப்பு தோல்வியடைந்தது: ${_parseErrorMessage(e)}'
+                  : 'Backup creation failed: ${_parseErrorMessage(e)}',
             ),
           ),
         );
@@ -318,7 +339,7 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
                 ),
               ],
             ),
-            content: Text(e.toString()),
+            content: Text(_parseErrorMessage(e)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),

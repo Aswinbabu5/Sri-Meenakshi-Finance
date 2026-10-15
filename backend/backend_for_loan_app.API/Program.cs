@@ -66,6 +66,17 @@ using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.EnsureCreated();
+
+        // Ensure EncryptedData column exists in backuphistories for persistent cloud storage
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE `backuphistories` ADD COLUMN IF NOT EXISTS `EncryptedData` LONGTEXT NULL;");
+        }
+        catch (Exception alterEx)
+        {
+            Console.WriteLine($"[INFO] EncryptedData column verification note: {alterEx.Message}");
+        }
+
         DataSeeder.SeedData(db);
         Console.WriteLine("[INFO] Database connected, initialized and seeded successfully.");
     }
