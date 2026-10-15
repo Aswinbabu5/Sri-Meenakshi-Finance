@@ -46,6 +46,7 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
     });
 
     try {
+      await _apiService.loadSavedBaseUrl();
       final overview = await _apiService.getOverview(widget.repository);
       final history = await _apiService.getHistory(widget.repository);
       final restoreHistory = await _apiService.getRestoreHistory(widget.repository);
@@ -452,13 +453,26 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(isTamil ? 'சர்வர் இணைப்பு அமைப்புகள்' : 'Backend Server Settings'),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            labelText: isTamil ? 'சர்வர் URL' : 'Server Base URL',
-            hintText: 'http://localhost:5000',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isTamil
+                  ? 'Render / கிளவுட் சர்வரின் நேரடி HTTPS URL-ஐ உள்ளிடவும்:'
+                  : 'Enter your live Render / Cloud HTTPS URL:',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: isTamil ? 'சர்வர் URL' : 'Server Base URL',
+                hintText: 'https://sri-meenakshi-finance.onrender.com',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -466,9 +480,12 @@ class _DatabaseBackupPageState extends State<DatabaseBackupPage> with SingleTick
             child: Text(isTamil ? 'ரத்து' : 'Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              _apiService.updateBaseUrl(controller.text.trim());
-              Navigator.pop(ctx);
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              if (newUrl.isNotEmpty) {
+                await _apiService.saveBaseUrl(newUrl);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
               _loadData();
             },
             child: Text(isTamil ? 'சேமி' : 'Save'),

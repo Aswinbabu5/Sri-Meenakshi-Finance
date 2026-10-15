@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../models/backup_model.dart';
 import 'loan_repository.dart';
 
+import 'database_helper.dart';
+
 class BackupApiService {
   static final BackupApiService _instance = BackupApiService._internal();
   factory BackupApiService() => _instance;
@@ -12,6 +14,7 @@ class BackupApiService {
 
   BackupApiService._internal() {
     _initDio();
+    loadSavedBaseUrl();
   }
 
   BackupApiService.custom({Dio? dio, String? baseUrl}) {
@@ -38,6 +41,26 @@ class BackupApiService {
         },
       ),
     );
+  }
+
+  Future<void> loadSavedBaseUrl() async {
+    try {
+      final saved = await DatabaseHelper.instance.getSetting('backend_base_url');
+      if (saved != null && saved.trim().isNotEmpty) {
+        updateBaseUrl(saved.trim());
+      }
+    } catch (e) {
+      debugPrint('Error loading saved base URL: $e');
+    }
+  }
+
+  Future<void> saveBaseUrl(String newUrl) async {
+    updateBaseUrl(newUrl);
+    try {
+      await DatabaseHelper.instance.setSetting('backend_base_url', newUrl);
+    } catch (e) {
+      debugPrint('Error saving base URL: $e');
+    }
   }
 
   void updateBaseUrl(String newUrl) {

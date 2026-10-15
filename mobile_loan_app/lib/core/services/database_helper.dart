@@ -621,6 +621,44 @@ class DatabaseHelper {
     }
   }
 
+  Future<String?> getSetting(String key) async {
+    try {
+      final db = await database;
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        )
+      ''');
+      final res = await db.query('app_settings', where: 'key = ?', whereArgs: [key]);
+      if (res.isNotEmpty) {
+        return res.first['value'] as String?;
+      }
+    } catch (e) {
+      debugPrint('Error getting setting $key: $e');
+    }
+    return null;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    try {
+      final db = await database;
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT
+        )
+      ''');
+      await db.insert(
+        'app_settings',
+        {'key': key, 'value': value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error setting $key: $e');
+    }
+  }
+
   Future<void> close() async {
     final db = _database;
     if (db != null) {
