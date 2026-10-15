@@ -1,9 +1,9 @@
 #!/bin/bash
 export PATH="/opt/homebrew/bin:$HOME/Library/Android/sdk/platform-tools:$PATH"
 
-APK_PATH="/Users/ashwin/Desktop/loan_management_system/Sri_Senthil_Murugan_Finance_Release.apk"
+APK_PATH="/Users/ashwin/Desktop/loan_management_system/Sri_Meenakshi_Finance_Release.apk"
 if [ ! -f "$APK_PATH" ]; then
-  APK_PATH="/Users/ashwin/Desktop/loan_management_system/Sri_Senthil_Murugan_Finance.apk"
+  APK_PATH="/Users/ashwin/Desktop/loan_management_system/mobile_loan_app/build/app/outputs/flutter-apk/app-release.apk"
 fi
 
 echo "=========================================================="
@@ -19,7 +19,7 @@ for i in {1..30}; do
     echo "Installing application onto $DEVICE..."
     adb -s "$DEVICE" install -r "$APK_PATH"
     echo "Launching Sri Meenakshi Finance on device..."
-    adb -s "$DEVICE" shell monkey -p com.example.mobileLoanApp -c android.intent.category.LAUNCHER 1
+    adb -s "$DEVICE" shell monkey -p com.example.mobile_loan_app -c android.intent.category.LAUNCHER 1
     echo "SUCCESS: App installed and launched on your phone!"
     exit 0
   fi
