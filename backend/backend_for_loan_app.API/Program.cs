@@ -128,7 +128,10 @@ static string NormalizeConnectionString(string? raw)
             var host = uri.Host;
             var port = uri.Port > 0 ? uri.Port : 3306;
             var database = uri.AbsolutePath.TrimStart('/');
-            if (string.IsNullOrWhiteSpace(database)) database = "loan";
+            if (string.IsNullOrWhiteSpace(database) || database.Equals("sys", StringComparison.OrdinalIgnoreCase))
+            {
+                database = "test";
+            }
 
             Console.WriteLine($"[INFO] Parsed MySQL URI -> Server={host};Port={port};Database={database};User Id={user};SslMode=Preferred");
             return $"Server={host};Port={port};Database={database};User Id={user};Password={pass};SslMode=Preferred;";
