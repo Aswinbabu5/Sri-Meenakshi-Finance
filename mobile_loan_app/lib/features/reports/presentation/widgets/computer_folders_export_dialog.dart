@@ -43,11 +43,11 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 580),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -56,14 +56,14 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.folder_special, color: AppColors.primary, size: 28),
+                    child: const Icon(Icons.folder_special, color: AppColors.primary, size: 26),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,18 +72,22 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
                           isTamil ? 'app-finance கணினி கோப்புறைகள்' : 'app-finance Storage Folders',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            fontSize: 17,
+                            fontSize: 16,
                             color: const Color(0xFF0D47A1),
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           isTamil
                               ? 'புகைப்படம், சான்றுகள் & உறுப்பினர் PDF-கள் நேரடி சேமிப்பு'
-                              : 'Direct disk folder storage (Windows C:\\app-finance, Mac ~/app-finance)',
+                              : 'Photos, proofs & member details stored directly in folders',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.grey.shade600,
-                            fontSize: 12,
+                            fontSize: 11.5,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -94,11 +98,11 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
                   ),
                 ],
               ),
-              const Divider(height: 24),
+              const Divider(height: 20),
 
               // Folders Explanation Card
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(10),
@@ -111,11 +115,15 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
                       children: [
                         const Icon(Icons.folder, size: 18, color: Color(0xFF0D47A1)),
                         const SizedBox(width: 6),
-                        Text(
-                          isTamil
-                              ? 'முக்கிய கோப்புறை: app-finance (நேரடி கோப்புறைகள்)'
-                              : 'Main Folder: app-finance (Direct Folders)',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                        Expanded(
+                          child: Text(
+                            isTamil
+                                ? 'முக்கிய கோப்புறை: app-finance'
+                                : 'Main Folder: app-finance',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -123,30 +131,30 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
                     _buildFolderRow(
                       icon: Icons.person_pin,
                       folderName: 'member-photo/',
-                      descTamil: 'உறுப்பினர் புகைப்படங்கள் (.jpg / .jpeg)',
-                      descEnglish: 'Member profile photos (.jpg / .jpeg)',
+                      descTamil: 'புகைப்படங்கள் (.jpg)',
+                      descEnglish: 'Member photos (.jpg)',
                       color: Colors.blue.shade700,
                     ),
                     const SizedBox(height: 6),
                     _buildFolderRow(
                       icon: Icons.badge,
                       folderName: 'member-proof/',
-                      descTamil: 'முன்பக்கம் & பின்பக்கம் ஆவண சான்றுகள் (.jpg / .jpeg)',
-                      descEnglish: 'Front & back ID proof photos (.jpg / .jpeg)',
+                      descTamil: 'ஆவண சான்றுகள் (.jpg)',
+                      descEnglish: 'Front & back proofs (.jpg)',
                       color: Colors.teal.shade700,
                     ),
                     const SizedBox(height: 6),
                     _buildFolderRow(
                       icon: Icons.picture_as_pdf,
                       folderName: 'member-details/',
-                      descTamil: 'உறுப்பினர் விவரங்கள் & தவணை பாஸ்புக் PDF வடிவில் (.pdf)',
-                      descEnglish: 'Member details & ledger passbook in PDF format (.pdf)',
+                      descTamil: 'உறுப்பினர் விவரங்கள் & பாஸ்புக் (.pdf)',
+                      descEnglish: 'Member details & ledger (.pdf)',
                       color: Colors.red.shade700,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Filter Line Selector
               if (!_isExporting && _result == null) ...[
@@ -278,38 +286,39 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
               const SizedBox(height: 18),
 
               // Action Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   TextButton(
                     onPressed: _isExporting ? null : () => Navigator.pop(context),
                     child: Text(isTamil ? 'மூடு (Close)' : 'Close'),
                   ),
-                  const SizedBox(width: 8),
                   if (!kIsWeb)
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal.shade700,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      label: Text(isTamil ? 'கோப்புறையை திறக்க' : 'Open app-finance Folder'),
+                      icon: const Icon(Icons.folder_open, size: 17),
+                      label: Text(isTamil ? 'கோப்புறை திற' : 'Open Folder'),
                       onPressed: () => AppFinanceFolderService.openAppFinanceFolder(),
                     ),
-                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D47A1),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    icon: Icon(_result == null ? Icons.save : Icons.replay, size: 18),
+                    icon: Icon(_result == null ? Icons.save : Icons.replay, size: 17),
                     label: Text(
                       _result == null
-                          ? (isTamil ? 'கோப்புறைகளில் சேமிக்க' : 'Save into app-finance Folders')
+                          ? (isTamil ? 'சேமிக்க' : 'Save Folders')
                           : (isTamil ? 'மீண்டும் சேமி' : 'Save Again'),
                     ),
                     onPressed: _isExporting ? null : _startExport,
@@ -333,24 +342,25 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
     final isTamil = widget.repository.isTamil;
     return Row(
       children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             folderName,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: color),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: color),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             isTamil ? descTamil : descEnglish,
-            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
