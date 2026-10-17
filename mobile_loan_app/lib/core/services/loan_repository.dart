@@ -847,7 +847,7 @@ class LoanRepository extends ChangeNotifier {
       }
     }
 
-    // Check if a collection already exists for this bond/loan on the same date
+    // Check if a collection already exists for this bond/loan on the same date with the same payment mode
     final existingIdx = _collections.indexWhere((c) {
       final cb = c.bondNumber.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
       final fb = finalBond.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
@@ -855,7 +855,8 @@ class LoanRepository extends ChangeNotifier {
       final sameDay = c.collectionDate.year == date.year &&
           c.collectionDate.month == date.month &&
           c.collectionDate.day == date.day;
-      return sameBond && sameDay;
+      final sameMode = c.paymentMode.toLowerCase() == paymentMode.toLowerCase();
+      return sameBond && sameDay && sameMode;
     });
 
     if (existingIdx != -1) {
@@ -1008,7 +1009,7 @@ class LoanRepository extends ChangeNotifier {
     try {
       return _collections.firstWhere((c) {
         final cb = c.bondNumber.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
-        final sameBond = cb == b || cb.endsWith(b);
+        final sameBond = cb == b || cb.endsWith(b) || b.endsWith(cb);
         final sameDay = c.collectionDate.year == date.year &&
             c.collectionDate.month == date.month &&
             c.collectionDate.day == date.day;
@@ -1019,11 +1020,30 @@ class LoanRepository extends ChangeNotifier {
     }
   }
 
-  List<CollectionModel> getLedger(String bondNumber) {
-    final b = bondNumber.trim().toUpperCase().replaceAll('-', '');
+  /// Get all collections recorded today for a specific loan/bond
+  List<CollectionModel> getTodayCollectionsForLoan(String bondNumber, DateTime date) {
+    final b = bondNumber.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
     return _collections.where((c) {
-      final cb = c.bondNumber.toUpperCase().replaceAll('-', '');
-      return cb == b || cb.endsWith(b);
+      final cb = c.bondNumber.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
+      final sameBond = cb == b || cb.endsWith(b) || b.endsWith(cb);
+      final sameDay = c.collectionDate.year == date.year &&
+          c.collectionDate.month == date.month &&
+          c.collectionDate.day == date.day;
+      return sameBond && sameDay;
+    }).toList();
+  }
+
+  List<CollectionModel> getLedger(String bondNumber, {int? loanId}) {
+    final b = bondNumber.trim().toUpperCase().replaceAll('-', '').replaceAll(' ', '');
+    return _collections.where((c) {
+      if (loanId != null && loanId > 0 && c.loanId == loanId) {
+        return true;
+      }
+      final cb = c.bondNumber.toUpperCase().replaceAll('-', '').replaceAll(' ', '');
+      if (cb == b) return true;
+      if (b.isNotEmpty && cb.endsWith(b)) return true;
+      if (cb.isNotEmpty && b.endsWith(cb)) return true;
+      return false;
     }).toList()
       ..sort((a, b) => b.collectionDate.compareTo(a.collectionDate));
   }

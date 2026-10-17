@@ -10,7 +10,7 @@ class BackupApiService {
   factory BackupApiService() => _instance;
 
   late final Dio _dio;
-  String _baseUrl = 'http://localhost:5000';
+  String _baseUrl = 'https://sri-meenakshi-finance.onrender.com';
 
   BackupApiService._internal() {
     _initDio();
@@ -27,7 +27,7 @@ class BackupApiService {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       _baseUrl = 'http://10.0.2.2:5000';
     } else {
-      _baseUrl = 'http://localhost:5000';
+      _baseUrl = 'https://sri-meenakshi-finance.onrender.com';
     }
 
     _dio = Dio(

@@ -19,12 +19,33 @@ bool isValidPhotoPath(String? path) {
   }
 }
 
+Uint8List? getSafeImageBytes(String? path) {
+  if (path == null || path.trim().isEmpty) return null;
+  if (path.startsWith('data:')) {
+    final commaIdx = path.indexOf(',');
+    final b64 = commaIdx != -1 ? path.substring(commaIdx + 1) : path;
+    try {
+      return base64Decode(b64);
+    } catch (_) {}
+  }
+  if (!kIsWeb) {
+    try {
+      final file = File(path);
+      if (file.existsSync()) {
+        return file.readAsBytesSync();
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
 ImageProvider? getSafeImageProvider(String? path) {
   if (path == null || path.trim().isEmpty) return null;
-  if (path.startsWith('data:') ||
-      path.startsWith('blob:') ||
-      path.startsWith('http://') ||
-      path.startsWith('https://')) {
+  if (path.startsWith('data:')) {
+    final bytes = getSafeImageBytes(path);
+    if (bytes != null) return MemoryImage(bytes);
+  }
+  if (path.startsWith('http://') || path.startsWith('https://')) {
     return NetworkImage(path);
   }
   if (!kIsWeb) {
@@ -48,10 +69,21 @@ Widget getSafeImageWidget(
   final fallback = placeholder ??
       const Center(child: Icon(Icons.person, color: Colors.grey, size: 28));
   if (path == null || path.trim().isEmpty) return fallback;
-  if (path.startsWith('data:') ||
-      path.startsWith('blob:') ||
-      path.startsWith('http://') ||
-      path.startsWith('https://')) {
+
+  if (path.startsWith('data:')) {
+    final bytes = getSafeImageBytes(path);
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
+        fit: fit,
+        width: width,
+        height: height,
+        errorBuilder: (context, error, stackTrace) => fallback,
+      );
+    }
+  }
+
+  if (path.startsWith('http://') || path.startsWith('https://')) {
     return Image.network(
       path,
       fit: fit,
@@ -60,6 +92,7 @@ Widget getSafeImageWidget(
       errorBuilder: (context, error, stackTrace) => fallback,
     );
   }
+
   if (!kIsWeb) {
     try {
       final file = File(path);
@@ -97,3 +130,4 @@ String? getPhotoBase64OrUri(String? path) {
   }
   return null;
 }
+

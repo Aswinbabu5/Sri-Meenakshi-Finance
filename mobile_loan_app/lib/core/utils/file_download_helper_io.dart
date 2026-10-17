@@ -56,6 +56,53 @@ Future<String> triggerFileDownload({
   return file.path;
 }
 
+Future<String> triggerBinaryDownload({
+  required Uint8List bytes,
+  required String fileName,
+  String mimeType = 'application/octet-stream',
+}) async {
+  Directory? targetDir;
+
+  if (Platform.isAndroid) {
+    try {
+      final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+      if (extDirs != null && extDirs.isNotEmpty) {
+        targetDir = extDirs.first;
+      }
+    } catch (_) {}
+  }
+
+  if (targetDir == null) {
+    try {
+      targetDir = await getDownloadsDirectory();
+    } catch (_) {}
+  }
+
+  targetDir ??= await getApplicationDocumentsDirectory();
+
+  if (!await targetDir.exists()) {
+    await targetDir.create(recursive: true);
+  }
+
+  final file = File('${targetDir.path}/$fileName');
+  await file.writeAsBytes(bytes);
+  return file.path;
+}
+
+Future<void> openDirectoryInFileManager(String path) async {
+  try {
+    if (Platform.isMacOS) {
+      await Process.run('open', [path]);
+    } else if (Platform.isWindows) {
+      await Process.run('explorer.exe', [path]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [path]);
+    }
+  } catch (e) {
+    debugPrint('Could not open file manager: $e');
+  }
+}
+
 Future<void> triggerPrintPassbook({
   required String htmlContent,
 }) async {
@@ -86,3 +133,4 @@ Future<String> saveTempFile({
   await file.writeAsString(content);
   return file.path;
 }
+

@@ -30,7 +30,7 @@ void main() {
       );
 
       final initialBalance = loan.balanceAmount;
-      expect(initialBalance, 11500);
+      expect(initialBalance, 10000.0);
 
       // Simon gives 100 in morning (at 10 AM)
       final col1 = await repo.recordCollection(

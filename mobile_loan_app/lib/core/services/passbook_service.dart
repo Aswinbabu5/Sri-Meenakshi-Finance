@@ -31,10 +31,23 @@ class PassbookService {
     final sortedLedger = List<CollectionModel>.from(ledger)
       ..sort((a, b) => a.collectionDate.compareTo(b.collectionDate));
 
-    double runningBal = loan.totalAmount;
+    final totalPrincipal = loan.totalAmount > 0 ? loan.totalAmount : (loan.loanAmount > 0 ? loan.loanAmount : loan.balanceAmount);
+    double runningBal = totalPrincipal;
     int currentSlNo = 1;
     double grandTotalColl = 0.0;
     final StringBuffer tableRowsHtml = StringBuffer();
+
+    // Opening balance row
+    final openDateStr = DateFormat('dd/MM/yy').format(loan.startDate);
+    final openBamtStr = NumberFormat('#,##0.00').format(totalPrincipal);
+    tableRowsHtml.write('''
+      <tr class="entry-row opening-row" style="background-color: #F8FAFC; font-weight: bold;">
+        <td class="col-sl">0</td>
+        <td class="col-date">$openDateStr</td>
+        <td class="col-collamt" style="color: #64748B; font-size: 11px;">${isTamil ? "ஆரம்ப கடன்" : "Principal"}</td>
+        <td class="col-bamt" style="color: #0D47A1;">$openBamtStr</td>
+      </tr>
+    ''');
 
     if (sortedLedger.isEmpty) {
       tableRowsHtml.write('''
@@ -295,11 +308,14 @@ class PassbookService {
         <div class="field-row"><span class="field-label">ID</span><span class="field-val">: $cusId</span></div>
         <div class="field-row"><span class="field-label">Name</span><span class="field-val">: ${loan.customerName}</span></div>
         <div class="field-row"><span class="field-label">Acc</span><span class="field-val">: ${loan.bondNumber}</span></div>
+        <div class="field-row"><span class="field-label">Loan</span><span class="field-val">: ₹${NumberFormat('#,##0').format(loan.loanAmount)} (${loan.tenureDays} ${isTamil ? "நாட்கள்" : "days"})</span></div>
+        <div class="field-row"><span class="field-label">Due</span><span class="field-val">: ₹${NumberFormat('#,##0').format(loan.dailyDueAmount)} / ${isTamil ? "நாள்" : "day"}</span></div>
+        <div class="field-row"><span class="field-label">Bal</span><span class="field-val" style="color: #B91C1C; font-weight: bold;">: ₹${NumberFormat('#,##0.00').format(loan.balanceAmount)}</span></div>
       </div>
     </div>
 
     <!-- Top Indicator -->
-    <div class="addl-line">Addl Date : &nbsp;Amt. 0</div>
+    <div class="addl-line">Date : ${DateFormat('dd/MM/yy').format(loan.startDate)} &nbsp;&bull;&nbsp; Amt. ${NumberFormat('#,##0').format(totalPrincipal)}</div>
 
     <!-- Table -->
     <table class="passbook-table">
@@ -331,7 +347,8 @@ class PassbookService {
     final sortedLedger = List<CollectionModel>.from(ledger)
       ..sort((a, b) => a.collectionDate.compareTo(b.collectionDate));
 
-    double runningBal = loan.totalAmount;
+    final totalPrincipal = loan.totalAmount > 0 ? loan.totalAmount : (loan.loanAmount > 0 ? loan.loanAmount : loan.balanceAmount);
+    double runningBal = totalPrincipal;
     int currentSlNo = 1;
     double grandTotalColl = 0.0;
     final StringBuffer sb = StringBuffer();
@@ -341,14 +358,18 @@ class PassbookService {
     sb.writeln("               $brandTitle");
     sb.writeln("            MADURAI • LOAN PASSBOOK");
     sb.writeln("=====================================================");
-    sb.writeln("ID   : $cusId");
-    sb.writeln("Name : ${loan.customerName}");
-    sb.writeln("Acc  : ${loan.bondNumber}");
+    sb.writeln("ID        : $cusId");
+    sb.writeln("Name      : ${loan.customerName}");
+    sb.writeln("Acc       : ${loan.bondNumber}");
+    sb.writeln("Loan Amt  : ₹${NumberFormat('#,##0').format(loan.loanAmount)} (${loan.tenureDays} days)");
+    sb.writeln("Daily Due : ₹${NumberFormat('#,##0').format(loan.dailyDueAmount)} / day");
+    sb.writeln("Balance   : ₹${NumberFormat('#,##0.00').format(loan.balanceAmount)}");
     sb.writeln("=====================================================");
-    sb.writeln("Addl Date :  Amt. 0");
+    sb.writeln("Date : ${DateFormat('dd/MM/yy').format(loan.startDate)}   Amt. ${NumberFormat('#,##0').format(totalPrincipal)}");
     sb.writeln("-----------------------------------------------------");
     sb.writeln("Sl. No.    Date         CollAmt            BAMT");
     sb.writeln("-----------------------------------------------------");
+    sb.writeln("${'0'.padRight(10)} ${DateFormat('dd/MM/yy').format(loan.startDate).padRight(12)} ${'Principal'.padRight(15)} ${NumberFormat('#,##0.00').format(totalPrincipal).padLeft(12)}");
 
     if (sortedLedger.isEmpty) {
       sb.writeln("          No receipts recorded yet");

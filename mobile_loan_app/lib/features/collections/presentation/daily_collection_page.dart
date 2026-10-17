@@ -31,12 +31,18 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
   DateTime _collectionDate = DateTime.now();
 
   late TextEditingController _bondNoController;
-  late TextEditingController _amountController;
+  late TextEditingController _cashAmountController;
+  late TextEditingController _gpayAmountController;
   late TextEditingController _notesController;
   String _paymentMode = 'Cash'; // 'Cash' or 'Online'
 
+  double get _cashAmount => double.tryParse(_cashAmountController.text.trim()) ?? 0.0;
+  double get _gpayAmount => double.tryParse(_gpayAmountController.text.trim()) ?? 0.0;
+  double get _totalCollectedAmount => _cashAmount + _gpayAmount;
+
   LoanModel? _currentLoan;
   CollectionModel? _todayExistingCollection;
+  List<CollectionModel> _todayExistingCollections = [];
 
   @override
   void initState() {
@@ -50,8 +56,12 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
     }
 
     _bondNoController = TextEditingController();
-    _amountController = TextEditingController();
+    _cashAmountController = TextEditingController();
+    _gpayAmountController = TextEditingController();
     _notesController = TextEditingController();
+
+    _cashAmountController.addListener(() => setState(() {}));
+    _gpayAmountController.addListener(() => setState(() {}));
 
     if (widget.initialBondNumber != null && widget.initialBondNumber!.isNotEmpty) {
       final bond = widget.initialBondNumber!.trim().toUpperCase();
@@ -72,7 +82,8 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
   @override
   void dispose() {
     _bondNoController.dispose();
-    _amountController.dispose();
+    _cashAmountController.dispose();
+    _gpayAmountController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -82,8 +93,10 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
     if (rawBond.isEmpty) {
       setState(() {
         _currentLoan = null;
-        _amountController.clear();
+        _cashAmountController.clear();
+        _gpayAmountController.clear();
         _todayExistingCollection = null;
+        _todayExistingCollections = [];
       });
       return;
     }
@@ -92,17 +105,50 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
     final loan = widget.repository.getLoanByBond(fullBond, _selectedLine) ?? widget.repository.getLoanByBond(rawBond, _selectedLine);
 
     CollectionModel? todayCol;
+    List<CollectionModel> todayCols = [];
     if (loan != null) {
       todayCol = widget.repository.getTodayCollectionForLoan(loan.bondNumber, _collectionDate);
+      todayCols = widget.repository.getTodayCollectionsForLoan(loan.bondNumber, _collectionDate);
     }
 
     setState(() {
       _currentLoan = loan;
       _todayExistingCollection = todayCol;
+      _todayExistingCollections = todayCols;
       if (loan != null) {
-        _amountController.text = loan.dailyDueAmount.toStringAsFixed(0);
+        final dueStr = loan.dailyDueAmount.toStringAsFixed(0);
+        if (_paymentMode == 'Online') {
+          _gpayAmountController.text = dueStr;
+          _cashAmountController.clear();
+        } else {
+          _cashAmountController.text = dueStr;
+          _gpayAmountController.clear();
+        }
       } else {
-        _amountController.clear();
+        _cashAmountController.clear();
+        _gpayAmountController.clear();
+      }
+    });
+  }
+
+  void _setPaymentMode(String mode) {
+    setState(() {
+      _paymentMode = mode;
+      final dueStr = _currentLoan?.dailyDueAmount.toStringAsFixed(0) ?? '';
+      if (mode == 'Cash') {
+        if (_cashAmountController.text.isEmpty && _gpayAmountController.text.isNotEmpty) {
+          _cashAmountController.text = _gpayAmountController.text;
+          _gpayAmountController.clear();
+        } else if (_cashAmountController.text.isEmpty && _gpayAmountController.text.isEmpty && dueStr.isNotEmpty) {
+          _cashAmountController.text = dueStr;
+        }
+      } else {
+        if (_gpayAmountController.text.isEmpty && _cashAmountController.text.isNotEmpty) {
+          _gpayAmountController.text = _cashAmountController.text;
+          _cashAmountController.clear();
+        } else if (_gpayAmountController.text.isEmpty && _cashAmountController.text.isEmpty && dueStr.isNotEmpty) {
+          _gpayAmountController.text = dueStr;
+        }
       }
     });
   }
@@ -183,11 +229,18 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
       return;
     }
 
-    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
-    if (amount <= 0) {
+    final cash = _cashAmount;
+    final gpay = _gpayAmount;
+    final total = _totalCollectedAmount;
+
+    if (total <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isTamil ? 'சரியான வசூல் தொகையை உள்ளிடவும்' : 'Please enter valid collected amount'),
+          content: Text(
+            isTamil
+                ? 'சரியான வசூல் தொகையை ரொக்கம் அல்லது Gpay-ல் உள்ளிடவும்'
+                : 'Please enter valid collected amount in Cash or Gpay',
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -195,31 +248,66 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
     }
 
     try {
-      final wasAlreadyPaidToday = _todayExistingCollection != null;
+      final wasAlreadyPaidToday = _todayExistingCollection != null || _todayExistingCollections.isNotEmpty;
       final effectiveBond = _currentLoan!.bondNumber;
-      final col = await widget.repository.recordCollection(
-        bondNumber: effectiveBond,
-        lineCode: _selectedLine,
-        amount: amount,
-        collectionDate: _collectionDate,
-        receiptType: widget.receiptType,
-        paymentMode: _paymentMode,
-        personName: _currentLoan!.customerName,
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-      );
+      final notesText = _notesController.text.trim().isEmpty ? null : _notesController.text.trim();
+      CollectionModel? lastCol;
+
+      if (cash > 0) {
+        lastCol = await widget.repository.recordCollection(
+          bondNumber: effectiveBond,
+          lineCode: _selectedLine,
+          amount: cash,
+          collectionDate: _collectionDate,
+          receiptType: widget.receiptType,
+          paymentMode: 'Cash',
+          personName: _currentLoan!.customerName,
+          notes: notesText,
+        );
+      }
+
+      if (gpay > 0) {
+        lastCol = await widget.repository.recordCollection(
+          bondNumber: effectiveBond,
+          lineCode: _selectedLine,
+          amount: gpay,
+          collectionDate: _collectionDate,
+          receiptType: widget.receiptType,
+          paymentMode: 'Online',
+          personName: _currentLoan!.customerName,
+          notes: notesText,
+        );
+      }
+
+      final col = lastCol!;
+
+      String successMsg;
+      if (cash > 0 && gpay > 0) {
+        successMsg = isTamil
+            ? '${col.customerName} - மொத்த வசூல் ₹${total.toStringAsFixed(0)} (ரொக்கம்: ₹${cash.toStringAsFixed(0)}, Gpay: ₹${gpay.toStringAsFixed(0)}) பதிவானது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
+            : '${col.customerName} - Total ₹${total.toStringAsFixed(0)} (Cash: ₹${cash.toStringAsFixed(0)}, Gpay: ₹${gpay.toStringAsFixed(0)}) recorded!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}';
+      } else if (cash > 0) {
+        successMsg = isTamil
+            ? (wasAlreadyPaidToday
+                ? '${col.customerName} - ரொக்கம் ₹${cash.toStringAsFixed(0)} சேர்க்கப்பட்டது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
+                : '${col.customerName} - ரொக்கம் ₹${cash.toStringAsFixed(0)} வசூல் பதிவானது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}')
+            : (wasAlreadyPaidToday
+                ? '${col.customerName} - Cash ₹${cash.toStringAsFixed(0)} added!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
+                : '${col.customerName} - Cash ₹${cash.toStringAsFixed(0)} recorded!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}');
+      } else {
+        successMsg = isTamil
+            ? (wasAlreadyPaidToday
+                ? '${col.customerName} - Gpay ₹${gpay.toStringAsFixed(0)} சேர்க்கப்பட்டது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
+                : '${col.customerName} - Gpay ₹${gpay.toStringAsFixed(0)} வசூல் பதிவானது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}')
+            : (wasAlreadyPaidToday
+                ? '${col.customerName} - Gpay ₹${gpay.toStringAsFixed(0)} added!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
+                : '${col.customerName} - Gpay ₹${gpay.toStringAsFixed(0)} recorded!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}');
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            isTamil
-                ? (wasAlreadyPaidToday
-                    ? '${col.customerName} - ₹${amount.toStringAsFixed(0)} சேர்க்கப்பட்டது! இன்று மொத்த வசூல்: ₹${col.amount.toStringAsFixed(0)}${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
-                    : '${col.customerName} - ₹${col.amount.toStringAsFixed(0)} வசூல் பதிவானது!${col.currentBalance > 0 ? " (மீதி: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}')
-                : (wasAlreadyPaidToday
-                    ? '${col.customerName} - ₹${amount.toStringAsFixed(0)} added! Today\'s Total: ₹${col.amount.toStringAsFixed(0)}${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'
-                    : '${col.customerName} - ₹${col.amount.toStringAsFixed(0)} recorded!${col.currentBalance > 0 ? " (Balance: ₹${col.currentBalance.toStringAsFixed(0)})" : ""}'),
-          ),
+          content: Text(successMsg),
           backgroundColor: AppColors.success,
           duration: const Duration(seconds: 2),
         ),
@@ -424,28 +512,152 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
                               ),
                               const SizedBox(height: 10),
 
-                              // Amount Received (₹) input (பெறப்பட்ட தொகை)
-                              TextFormField(
-                                controller: _amountController,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(8),
+                              // Cash and Gpay Amount Inputs
+                              Row(
+                                children: [
+                                  // Cash (₹) input (ரொக்கம்)
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _cashAmountController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(8),
+                                      ],
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+                                      decoration: InputDecoration(
+                                        labelText: isTamil ? "ரொக்கம் (Cash ₹)" : "Cash (₹)",
+                                        hintText: '500',
+                                        prefixText: "₹ ",
+                                        prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1B5E20)),
+                                        prefixIcon: const Icon(Icons.payments_outlined, size: 18, color: Color(0xFF1B5E20)),
+                                        filled: true,
+                                        fillColor: _paymentMode == 'Cash' ? Colors.green.shade50.withValues(alpha: 0.5) : Colors.grey.shade50,
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                            color: _cashAmount > 0 ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+                                            width: _cashAmount > 0 ? 1.5 : 1.0,
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                            color: _cashAmount > 0 ? const Color(0xFF2E7D32) : Colors.grey.shade300,
+                                            width: _cashAmount > 0 ? 1.5 : 1.0,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Gpay (₹) input (Online UPI)
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _gpayAmountController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(8),
+                                      ],
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
+                                      decoration: InputDecoration(
+                                        labelText: "Gpay (UPI ₹)",
+                                        hintText: '0',
+                                        prefixText: "₹ ",
+                                        prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0D47A1)),
+                                        prefixIcon: const Icon(Icons.phone_android, size: 18, color: Color(0xFF0D47A1)),
+                                        filled: true,
+                                        fillColor: _paymentMode == 'Online' ? Colors.blue.shade50.withValues(alpha: 0.5) : Colors.grey.shade50,
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                            color: _gpayAmount > 0 ? const Color(0xFF1565C0) : Colors.grey.shade300,
+                                            width: _gpayAmount > 0 ? 1.5 : 1.0,
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                            color: _gpayAmount > 0 ? const Color(0xFF1565C0) : Colors.grey.shade300,
+                                            width: _gpayAmount > 0 ? 1.5 : 1.0,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ],
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.success),
-                                decoration: InputDecoration(
-                                  labelText: isTamil ? "பெறப்பட்ட தொகை (₹) (Amount Received)" : "Amount Received (₹)",
-                                  hintText: '500',
-                                  prefixText: "₹ ",
-                                  prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.success),
-                                  prefixIcon: const Icon(Icons.currency_rupee, size: 20, color: AppColors.success),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                                ),
                               ),
                               const SizedBox(height: 10),
+
+                              // Dynamic Total Amount Field - Shown when amount given in Cash or Gpay
+                              if (_totalCollectedAmount > 0) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Colors.green.shade50, Colors.teal.shade50],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFF2E7D32), width: 1.5),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.green.shade100.withValues(alpha: 0.4),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.calculate, color: Color(0xFF1B5E20), size: 20),
+                                          const SizedBox(width: 6),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                isTamil ? "மொத்த வசூல் தொகை:" : "Total Collection Amount:",
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12.5,
+                                                  color: Color(0xFF1B5E20),
+                                                ),
+                                              ),
+                                              if (_cashAmount > 0 && _gpayAmount > 0)
+                                                Text(
+                                                  "${isTamil ? 'ரொக்கம்' : 'Cash'}: ₹${_cashAmount.toStringAsFixed(0)} + Gpay: ₹${_gpayAmount.toStringAsFixed(0)}",
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.green.shade900,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      Text(
+                                        CurrencyUtils.format(_totalCollectedAmount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 18,
+                                          color: Color(0xFF1B5E20),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
 
                               // Purpose / Notes input (காரணம் / குறிப்பு)
                               TextFormField(
@@ -620,7 +832,7 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
                                 children: [
                                   Expanded(
                                     child: AnimatedPressable(
-                                      onTap: () => setState(() => _paymentMode = 'Cash'),
+                                      onTap: () => _setPaymentMode('Cash'),
                                       child: AnimatedContainer(
                                         duration: AppAnimations.fast,
                                         curve: Curves.easeInOut,
@@ -658,7 +870,7 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: AnimatedPressable(
-                                      onTap: () => setState(() => _paymentMode = 'Online'),
+                                      onTap: () => _setPaymentMode('Online'),
                                       child: AnimatedContainer(
                                         duration: AppAnimations.fast,
                                         curve: Curves.easeInOut,
@@ -769,11 +981,11 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Today's Comprehensive Accounting & Amount Received Card
+                      // Today's Comprehensive Accounting & Amount Received Card (Total, Cash, Gpay)
                       StaggeredEntrance(
                         index: 1,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF1F8E9),
                             borderRadius: BorderRadius.circular(10),
@@ -782,29 +994,75 @@ class _DailyCollectionPageState extends State<DailyCollectionPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Row 1: Parties & Total Collection (Wrap for responsive safety)
                               Wrap(
                                 alignment: WrapAlignment.spaceBetween,
                                 runAlignment: WrapAlignment.center,
                                 crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 8,
-                                runSpacing: 6,
+                                spacing: 10,
+                                runSpacing: 8,
                                 children: [
-                                  Text(
-                                    "${isTamil ? 'மொத்த நபர்கள்' : 'Total Party'}: ${dailySheet.length}",
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                  // Total Parties
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.people_outline, size: 16, color: AppColors.primaryDark),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "${isTamil ? 'நபர்கள்' : 'Parties'}: ",
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                      Text(
+                                        "${dailySheet.length}",
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
+                                      ),
+                                    ],
                                   ),
+                                  // Cash Total
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.payments_outlined, size: 15, color: Color(0xFF1B5E20)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        "${isTamil ? 'ரொக்கம்' : 'Cash'}: ",
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1B5E20)),
+                                      ),
+                                      AnimatedCountingNumber(
+                                        value: dailySheet.where((c) => c.isCash).fold<double>(0, (sum, c) => sum + c.amount),
+                                        isCurrency: true,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFF1B5E20)),
+                                      ),
+                                    ],
+                                  ),
+                                  // Gpay Total
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.phone_android, size: 15, color: Color(0xFF0D47A1)),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        "Gpay: ",
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0D47A1)),
+                                      ),
+                                      AnimatedCountingNumber(
+                                        value: dailySheet.where((c) => c.isOnline).fold<double>(0, (sum, c) => sum + c.amount),
+                                        isCurrency: true,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFF0D47A1)),
+                                      ),
+                                    ],
+                                  ),
+                                  // Grand Total
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        "${isTamil ? 'தவணை வசூல்' : 'Coll. Rs'}: ",
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: AppColors.primaryDark),
+                                        "${isTamil ? 'மொத்த வசூல்' : 'Total Coll'}: ",
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Color(0xFFB71C1C)),
                                       ),
                                       AnimatedCountingNumber(
                                         value: dayCollection,
                                         isCurrency: true,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryDark),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFFB71C1C)),
                                       ),
                                     ],
                                   ),

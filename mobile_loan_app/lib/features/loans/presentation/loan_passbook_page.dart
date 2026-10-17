@@ -7,6 +7,7 @@ import '../../../core/models/loan_model.dart';
 import '../../../core/models/collection_model.dart';
 import '../../../core/services/loan_repository.dart';
 import '../../../core/services/passbook_service.dart';
+import '../../../core/services/records_export_service.dart';
 import '../../dashboard/presentation/widgets/company_header.dart';
 
 class LoanPassbookPage extends StatefulWidget {
@@ -27,16 +28,23 @@ class LoanPassbookPage extends StatefulWidget {
 
 class _LoanPassbookPageState extends State<LoanPassbookPage> {
   bool _isDownloading = false;
+  bool _isGeneratingPdf = false;
   late LoanModel _currentLoan;
 
   @override
   void initState() {
     super.initState();
-    _currentLoan = widget.loan;
+    final fresh = widget.repository.getLoanByBond(widget.loan.bondNumber, widget.loan.lineCode);
+    _currentLoan = fresh ?? widget.loan;
   }
 
-  List<CollectionModel> get _ledger =>
-      widget.repository.getLedger(widget.loan.bondNumber);
+  LoanModel get _effectiveLoan =>
+      widget.repository.getLoanByBond(_currentLoan.bondNumber, _currentLoan.lineCode) ?? _currentLoan;
+
+  List<CollectionModel> get _ledger {
+    final loan = _effectiveLoan;
+    return widget.repository.getLedger(loan.bondNumber, loanId: loan.id);
+  }
 
   Future<void> _handleDownload() async {
     setState(() => _isDownloading = true);
@@ -44,7 +52,7 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
 
     try {
       final savedPath = await PassbookService.downloadPassbookHtml(
-        loan: _currentLoan,
+        loan: _effectiveLoan,
         ledger: _ledger,
         isTamil: isTamil,
       );
@@ -92,11 +100,55 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
     }
   }
 
+  Future<void> _handleDownloadMemberPdf() async {
+    setState(() => _isGeneratingPdf = true);
+    final isTamil = widget.repository.isTamil;
+    try {
+      final savedPath = await RecordsExportService.exportSingleMemberPdf(
+        loan: _effectiveLoan,
+        collections: _ledger,
+        isTamil: isTamil,
+      );
+
+      setState(() => _isGeneratingPdf = false);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isTamil
+                      ? 'உறுப்பினர் PDF வெற்றிகரமாக பதிவிறக்கப்பட்டது! ($savedPath)'
+                      : 'Member PDF downloaded successfully! ($savedPath)',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF2E7D32),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isGeneratingPdf = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isTamil ? 'PDF பிழை: $e' : 'PDF Error: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _handlePrint() async {
     final isTamil = widget.repository.isTamil;
     try {
       await PassbookService.printPassbook(
-        loan: _currentLoan,
+        loan: _effectiveLoan,
         ledger: _ledger,
         isTamil: isTamil,
       );
@@ -115,7 +167,7 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
     final isTamil = widget.repository.isTamil;
     try {
       await PassbookService.sharePassbook(
-        loan: _currentLoan,
+        loan: _effectiveLoan,
         ledger: _ledger,
         isTamil: isTamil,
       );
@@ -183,7 +235,7 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
   @override
   Widget build(BuildContext context) {
     final isTamil = widget.repository.isTamil;
-    final loan = _currentLoan;
+    final loan = _effectiveLoan;
 
     final returnTitle = widget.returnPanelTitle ??
         (isTamil ? "முதன்மை பதிவுக்கு திரும்பு" : "Return to Panel");
@@ -203,6 +255,17 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
           onPressed: _returnBackToPanel,
         ),
         actions: [
+          IconButton(
+            icon: _isGeneratingPdf
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Icon(Icons.picture_as_pdf),
+            tooltip: isTamil ? "உறுப்பினர் முழு விவர PDF" : "Download Member PDF",
+            onPressed: _isGeneratingPdf ? null : _handleDownloadMemberPdf,
+          ),
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: isTamil ? "பிரிண்ட் / PDF" : "Print / PDF",
@@ -458,46 +521,145 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Photo Box
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              width: 75,
-              height: 85,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                border: Border.all(color: const Color(0xFF1A365D), width: 1.2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Photo Box
+              ClipRRect(
                 borderRadius: BorderRadius.circular(6),
-              ),
-              child: getSafeImageWidget(
-                loan.photoPath,
-                fit: BoxFit.cover,
-                placeholder: const Center(
-                  child: Icon(Icons.person, size: 44, color: Color(0xFF1A365D)),
+                child: Container(
+                  width: 75,
+                  height: 85,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    border: Border.all(color: const Color(0xFF1A365D), width: 1.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: getSafeImageWidget(
+                    loan.photoPath,
+                    fit: BoxFit.cover,
+                    placeholder: const Center(
+                      child: Icon(Icons.person, size: 44, color: Color(0xFF1A365D)),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 16),
+              // ID, Name, Acc, Phone
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _headerFieldRow("ID", cusId),
+                    const SizedBox(height: 5),
+                    _headerFieldRow(isTamil ? "பெயர்" : "Name", loan.customerName),
+                    const SizedBox(height: 5),
+                    _headerFieldRow(isTamil ? "தவணை" : "Acc", loan.bondNumber),
+                    if (loan.phoneNumber.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      _headerFieldRow(isTamil ? "தொலைபேசி" : "Phone", loan.phoneNumber),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          // ID, Name, Acc
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 12),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 10),
+
+          // Loan Financial Metrics Grid
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              runSpacing: 8,
+              spacing: 8,
               children: [
-                _headerFieldRow("ID", cusId),
-                const SizedBox(height: 6),
-                _headerFieldRow("Name", loan.customerName),
-                const SizedBox(height: 6),
-                _headerFieldRow("Acc", loan.bondNumber),
+                _buildPassbookMetric(
+                  label: isTamil ? "கடன் தொகை" : "Loan Amount",
+                  value: "₹${NumberFormat('#,##0').format(loan.loanAmount)}",
+                  color: const Color(0xFF1A365D),
+                ),
+                _buildPassbookMetric(
+                  label: isTamil ? "தவணைத் தொகை" : "Daily Due",
+                  value: "₹${NumberFormat('#,##0').format(loan.dailyDueAmount)}",
+                  sublabel: "/ ${isTamil ? 'நாள்' : 'day'}",
+                  color: const Color(0xFF0D47A1),
+                ),
+                _buildPassbookMetric(
+                  label: isTamil ? "மொத்தத் தொகை" : "Total Amount",
+                  value: "₹${NumberFormat('#,##0').format(loan.totalAmount > 0 ? loan.totalAmount : loan.loanAmount)}",
+                  color: const Color(0xFF334155),
+                ),
+                _buildPassbookMetric(
+                  label: isTamil ? "வசூலானது" : "Paid",
+                  value: "₹${NumberFormat('#,##0').format(loan.collectedAmount)}",
+                  color: const Color(0xFF2E7D32),
+                ),
+                _buildPassbookMetric(
+                  label: isTamil ? "மீதி பாக்கி" : "Balance",
+                  value: "₹${NumberFormat('#,##0').format(loan.balanceAmount)}",
+                  color: const Color(0xFFDC2626),
+                  isBold: true,
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPassbookMetric({
+    required String label,
+    required String value,
+    String? sublabel,
+    required Color color,
+    bool isBold = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
+                color: color,
+              ),
+            ),
+            if (sublabel != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(
+                  sublabel,
+                  style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.8)),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -545,11 +707,21 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
     final numFormat = NumberFormat('#,##0');
     final decimalFormat = NumberFormat('#,##0.00');
 
-    double runningBal = loan.totalAmount;
+    final totalPrincipal = loan.totalAmount > 0 ? loan.totalAmount : (loan.loanAmount > 0 ? loan.loanAmount : loan.balanceAmount);
+    double runningBal = totalPrincipal;
     int currentSlNo = 1;
     double grandTotalColl = 0.0;
 
     final List<_PassbookUiEntry> entries = [];
+
+    // Opening balance row (Sl. No. 0)
+    entries.add(_PassbookUiEntry(
+      slNo: 0,
+      dateText: DateFormat('dd/MM/yy').format(loan.startDate),
+      collAmtText: isTamil ? "ஆரம்ப கடன்" : "Principal",
+      bamtText: decimalFormat.format(totalPrincipal),
+      type: _PassbookRowType.opening,
+    ));
 
     if (sortedLedger.isNotEmpty) {
       int i = 0;
@@ -613,17 +785,31 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top Indicator: Addl Date : Amt. 0
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6.0),
-            child: Text(
-              "Addl Date :  Amt. 0",
-              style: TextStyle(
-                fontFamily: 'Courier',
-                fontSize: 14.5,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A365D),
-              ),
+          // Top Indicator: Date and Total Principal
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Date : ${DateFormat('dd/MM/yy').format(loan.startDate)}",
+                  style: const TextStyle(
+                    fontFamily: 'Courier',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A365D),
+                  ),
+                ),
+                Text(
+                  "Amt. ${NumberFormat('#,##0').format(totalPrincipal)}",
+                  style: const TextStyle(
+                    fontFamily: 'Courier',
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A365D),
+                  ),
+                ),
+              ],
             ),
           ),
           const Divider(color: Color(0xFF1A365D), thickness: 1.2, height: 1.2),
@@ -693,25 +879,86 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
             ),
           ),
 
-          if (entries.isEmpty)
+          ...entries.map((entry) => _buildRowForEntry(entry)),
+
+          if (sortedLedger.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(32.0),
+              padding: const EdgeInsets.symmetric(vertical: 24.0),
               child: Center(
                 child: Text(
-                  isTamil ? "வசூல் பதிவுகள் இல்லை (No receipts yet)" : "No collection records yet",
-                  style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                  isTamil ? "வசூல் பதிவுகள் இல்லை (No receipts recorded yet)" : "No collection records recorded yet",
+                  style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey.shade600, fontSize: 13),
                 ),
               ),
-            )
-          else
-            ...entries.map((entry) => _buildRowForEntry(entry)),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildRowForEntry(_PassbookUiEntry entry) {
-    if (entry.type == _PassbookRowType.regular) {
+    if (entry.type == _PassbookRowType.opening) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          border: Border(bottom: BorderSide(color: Colors.blueGrey.shade200, width: 1.0)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 60,
+              child: Text(
+                "${entry.slNo ?? 0}",
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  color: Color(0xFF1A365D),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 90,
+              child: Text(
+                entry.dateText ?? '',
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  color: Color(0xFF1A365D),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                entry.collAmtText,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                entry.bamtText ?? '',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontFamily: 'Courier',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  color: Color(0xFF0D47A1),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (entry.type == _PassbookRowType.regular) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
@@ -927,13 +1174,24 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
+                    _handleDownloadMemberPdf();
+                  },
+                  icon: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
+                  label: Text(isTamil ? "உறுப்பினர் PDF" : "Member PDF"),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
                     _handlePrint();
                   },
                   icon: const Icon(Icons.print, size: 18),
-                  label: Text(isTamil ? "பிரிண்ட் / PDF" : "Print / PDF"),
+                  label: Text(isTamil ? "பிரிண்ட் / HTML" : "Print / HTML"),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
@@ -972,7 +1230,7 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
   }
 }
 
-enum _PassbookRowType { regular, monthSubtotal, grandTotal }
+enum _PassbookRowType { regular, monthSubtotal, grandTotal, opening }
 
 class _PassbookUiEntry {
   final int? slNo;

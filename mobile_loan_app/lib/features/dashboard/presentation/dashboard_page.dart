@@ -10,6 +10,7 @@ import '../../reports/presentation/reports_page.dart';
 import '../../loans/presentation/bond_search_page.dart';
 import '../../loans/presentation/owner_capital_page.dart';
 import '../../backup/presentation/database_backup_page.dart';
+import '../../reports/presentation/widgets/computer_folders_export_dialog.dart';
 
 class DashboardPage extends StatefulWidget {
   final LoanRepository repository;
@@ -181,6 +182,18 @@ class _DashboardPageState extends State<DashboardPage> {
                                   MaterialPageRoute(builder: (_) => DatabaseBackupPage(repository: repo)),
                                 ),
                               ),
+                              // 10: கணினி கோப்புறைகள் & PDF / PC Folders (Photos, Proofs, PDFs)
+                              _buildActionTile(
+                                titleTamil: "கணினி கோப்புறைகள்",
+                                subtitleTamil: "( Photos • Proofs • PDFs )",
+                                titleEnglish: "PC Folders & PDFs",
+                                icon: Icons.folder_copy,
+                                color: const Color(0xFFE1F5FE),
+                                textColor: const Color(0xFF01579B),
+                                borderColor: Colors.lightBlue.shade400,
+                                isHighlighted: true,
+                                onTap: () => ComputerFoldersExportDialog.show(context, repo),
+                              ),
                             ];
 
                             return GridView.count(
@@ -327,7 +340,7 @@ class _DashboardPageState extends State<DashboardPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             void submitPassword() {
-              const staticPassword = '@ADsmf1';
+              const staticPassword = 'PASSWORD@123';
               if (passwordController.text.trim() == staticPassword) {
                 Navigator.pop(dialogCtx);
                 Navigator.push(

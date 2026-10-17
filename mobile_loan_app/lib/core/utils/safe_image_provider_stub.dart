@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 
 bool isValidPhotoPath(String? path) => false;
@@ -14,3 +15,5 @@ Widget getSafeImageWidget(
     placeholder ?? const SizedBox.shrink();
 
 String? getPhotoBase64OrUri(String? path) => null;
+
+Uint8List? getSafeImageBytes(String? path) => null;

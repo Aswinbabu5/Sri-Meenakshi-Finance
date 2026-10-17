@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import '../../../../core/models/loan_model.dart';
 import '../../../../core/models/customer_model.dart';
 import '../../dashboard/presentation/widgets/company_header.dart';
 import '../../dashboard/presentation/widgets/line_and_year_dialogs.dart';
+import '../../../../core/services/app_finance_folder_service.dart';
 import 'loan_passbook_page.dart';
 
 class LoanFormPage extends StatefulWidget {
@@ -249,7 +251,8 @@ class _LoanFormPageState extends State<LoanFormPage> {
           imageQuality: 85,
         );
         if (picked != null) {
-          imagePath = picked.path;
+          final bytes = await picked.readAsBytes();
+          imagePath = 'data:image/jpeg;base64,${base64Encode(bytes)}';
         }
       }
 
@@ -426,9 +429,22 @@ class _LoanFormPageState extends State<LoanFormPage> {
         );
       }
 
+      // Automatically store photos, proofs, and member details PDF directly into app-finance folders!
+      MemberFilesSaveResult? folderResult;
+      try {
+        final ledger = widget.repository.getLedger(newLoan.bondNumber, loanId: newLoan.id);
+        folderResult = await AppFinanceFolderService.saveMemberFiles(
+          loan: newLoan,
+          collections: ledger,
+          isTamil: isTamil,
+        );
+      } catch (err) {
+        debugPrint('Auto folder save error: $err');
+      }
+
       if (mounted) {
         setState(() => _isSaving = false);
-        _showLoanSuccessDialog(newLoan);
+        _showLoanSuccessDialog(newLoan, folderResult);
       }
     } catch (e) {
       if (mounted) {
@@ -507,7 +523,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
     );
   }
 
-  void _showLoanSuccessDialog(LoanModel newLoan) {
+  void _showLoanSuccessDialog(LoanModel newLoan, [MemberFilesSaveResult? folderResult]) {
     final isTamil = widget.repository.isTamil;
 
     showDialog(
@@ -531,6 +547,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Member Summary Card
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -538,44 +555,79 @@ class _LoanFormPageState extends State<LoanFormPage> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFF90CAF9)),
               ),
+              child: Row(
+                children: [
+                  if (isValidPhotoPath(newLoan.photoPath)) ...[
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: getSafeImageProvider(newLoan.photoPath),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${isTamil ? 'தவணை எண்' : 'Bond'}: ${newLoan.bondNumber}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0D47A1)),
+                        ),
+                        Text(
+                          "${isTamil ? 'பெயர்' : 'Party'}: ${newLoan.customerName}",
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(4)),
+                    child: Text("Line ${newLoan.lineCode}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Direct app-finance Storage Confirmation Card
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F8E9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade300),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      if (isValidPhotoPath(newLoan.photoPath)) ...[
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundImage: getSafeImageProvider(newLoan.photoPath),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "${isTamil ? 'தவணை எண்' : 'Bond'}: ${newLoan.bondNumber}",
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0D47A1)),
-                            ),
-                            Text(
-                              "${isTamil ? 'பெயர்' : 'Party'}: ${newLoan.customerName}",
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(4)),
-                        child: Text("Line ${newLoan.lineCode}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      const Icon(Icons.folder_shared, size: 16, color: Color(0xFF2E7D32)),
+                      const SizedBox(width: 6),
+                      Text(
+                        isTamil ? "app-finance கோப்புறைகளில் நேரடி சேமிப்பு:" : "Stored in app-finance Folders:",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1B5E20)),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isTamil
+                        ? "• member-photo/ (புகைப்படம் .jpg)\n• member-proof/ (சான்றுகள் .jpg)\n• member-details/ (விவரங்கள் .pdf)"
+                        : "• member-photo/ (Profile Photo .jpg)\n• member-proof/ (ID Proof .jpg)\n• member-details/ (Member Details .pdf)",
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF33691E), height: 1.4),
+                  ),
+                  if (folderResult?.rootFolderPath != null) ...[
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      folderResult!.rootFolderPath!,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Text(
               isTamil
                   ? "வாடிக்கையாளருக்கு பாஸ்புக் பார்க்க மற்றும் பதிவிறக்கம் செய்ய கீழே உள்ள பொத்தானை அழுத்தவும்:"
@@ -585,6 +637,25 @@ class _LoanFormPageState extends State<LoanFormPage> {
           ],
         ),
         actions: [
+          if (!kIsWeb) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => AppFinanceFolderService.openAppFinanceFolder(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  side: const BorderSide(color: Color(0xFF00796B)),
+                  foregroundColor: const Color(0xFF00796B),
+                ),
+                icon: const Icon(Icons.folder_open, size: 18),
+                label: Text(
+                  isTamil ? "app-finance கோப்புறையை திறக்க" : "Open app-finance Folder",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(

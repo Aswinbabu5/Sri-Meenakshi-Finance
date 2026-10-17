@@ -6,6 +6,7 @@ import '../../../../core/utils/currency_utils.dart';
 import '../../../../core/utils/file_download_helper.dart';
 import '../../dashboard/presentation/widgets/company_header.dart';
 import 'widgets/ledger_analytics_widget.dart';
+import 'widgets/computer_folders_export_dialog.dart';
 
 class ReportsPage extends StatefulWidget {
   final LoanRepository repository;
@@ -56,6 +57,11 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
         backgroundColor: const Color(0xFF1565C0),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_copy),
+            tooltip: isTamil ? "கணினி கோப்புறைகள் & PDF ஏற்றுமதி" : "Export PC Folders & PDFs",
+            onPressed: () => ComputerFoldersExportDialog.show(context, widget.repository),
+          ),
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: isTamil ? "பேரேடு வடிகட்டி" : "Filter Ledger",

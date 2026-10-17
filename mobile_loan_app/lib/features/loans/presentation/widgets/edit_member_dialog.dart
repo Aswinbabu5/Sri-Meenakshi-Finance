@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,7 @@ import '../../../../core/services/loan_repository.dart';
 import '../../../../core/utils/currency_utils.dart';
 import '../../../../core/utils/web_camera_helper.dart';
 import '../../../../core/utils/safe_image_provider.dart';
+import '../../../../core/services/app_finance_folder_service.dart';
 
 class EditMemberDialog extends StatefulWidget {
   final LoanModel loan;
@@ -104,7 +106,8 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
           imageQuality: 85,
         );
         if (picked != null) {
-          imagePath = picked.path;
+          final bytes = await picked.readAsBytes();
+          imagePath = 'data:image/jpeg;base64,${base64Encode(bytes)}';
         }
       }
 
@@ -204,12 +207,24 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
         startDate: _startDate,
       );
 
+      final updatedLoan = widget.repository.getLoanByBond(widget.loan.bondNumber, widget.loan.lineCode) ?? widget.loan;
+      try {
+        final collections = widget.repository.getLedger(updatedLoan.bondNumber, loanId: updatedLoan.id);
+        await AppFinanceFolderService.saveMemberFiles(
+          loan: updatedLoan,
+          collections: collections,
+          isTamil: widget.repository.isTamil,
+        );
+      } catch (err) {
+        debugPrint('Auto folder sync on member edit: $err');
+      }
+
       if (mounted) {
         widget.onUpdated();
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isTamil ? 'உறுப்பினர் விவரங்கள் வெற்றிகரமாக புதுப்பிக்கப்பட்டன!' : 'Member details updated successfully!'),
+            content: Text(isTamil ? 'உறுப்பினர் விவரங்கள் & app-finance கோப்புறைகள் புதுப்பிக்கப்பட்டன!' : 'Member details & app-finance folders updated!'),
             backgroundColor: AppColors.success,
           ),
         );
