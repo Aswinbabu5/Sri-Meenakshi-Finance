@@ -521,145 +521,50 @@ class _LoanPassbookPageState extends State<LoanPassbookPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Photo Box
-              ClipRRect(
+          // Photo Box
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              width: 75,
+              height: 85,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                border: Border.all(color: const Color(0xFF1A365D), width: 1.2),
                 borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  width: 75,
-                  height: 85,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    border: Border.all(color: const Color(0xFF1A365D), width: 1.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: getSafeImageWidget(
-                    loan.photoPath,
-                    fit: BoxFit.cover,
-                    placeholder: const Center(
-                      child: Icon(Icons.person, size: 44, color: Color(0xFF1A365D)),
-                    ),
-                  ),
+              ),
+              child: getSafeImageWidget(
+                loan.photoPath,
+                fit: BoxFit.cover,
+                placeholder: const Center(
+                  child: Icon(Icons.person, size: 44, color: Color(0xFF1A365D)),
                 ),
               ),
-              const SizedBox(width: 16),
-              // ID, Name, Acc, Phone
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _headerFieldRow("ID", cusId),
-                    const SizedBox(height: 5),
-                    _headerFieldRow(isTamil ? "பெயர்" : "Name", loan.customerName),
-                    const SizedBox(height: 5),
-                    _headerFieldRow(isTamil ? "தவணை" : "Acc", loan.bondNumber),
-                    if (loan.phoneNumber.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      _headerFieldRow(isTamil ? "தொலைபேசி" : "Phone", loan.phoneNumber),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
-          const SizedBox(height: 10),
-
-          // Loan Financial Metrics Grid
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              runSpacing: 8,
-              spacing: 8,
+          ),
+          const SizedBox(width: 16),
+          // ID, Name, Acc, Phone
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildPassbookMetric(
-                  label: isTamil ? "கடன் தொகை" : "Loan Amount",
-                  value: "₹${NumberFormat('#,##0').format(loan.loanAmount)}",
-                  color: const Color(0xFF1A365D),
-                ),
-                _buildPassbookMetric(
-                  label: isTamil ? "தவணைத் தொகை" : "Daily Due",
-                  value: "₹${NumberFormat('#,##0').format(loan.dailyDueAmount)}",
-                  sublabel: "/ ${isTamil ? 'நாள்' : 'day'}",
-                  color: const Color(0xFF0D47A1),
-                ),
-                _buildPassbookMetric(
-                  label: isTamil ? "மொத்தத் தொகை" : "Total Amount",
-                  value: "₹${NumberFormat('#,##0').format(loan.totalAmount > 0 ? loan.totalAmount : loan.loanAmount)}",
-                  color: const Color(0xFF334155),
-                ),
-                _buildPassbookMetric(
-                  label: isTamil ? "வசூலானது" : "Paid",
-                  value: "₹${NumberFormat('#,##0').format(loan.collectedAmount)}",
-                  color: const Color(0xFF2E7D32),
-                ),
-                _buildPassbookMetric(
-                  label: isTamil ? "மீதி பாக்கி" : "Balance",
-                  value: "₹${NumberFormat('#,##0').format(loan.balanceAmount)}",
-                  color: const Color(0xFFDC2626),
-                  isBold: true,
-                ),
+                _headerFieldRow("ID", cusId),
+                const SizedBox(height: 5),
+                _headerFieldRow(isTamil ? "பெயர்" : "Name", loan.customerName),
+                const SizedBox(height: 5),
+                _headerFieldRow(isTamil ? "தவணை" : "Acc", loan.bondNumber),
+                if (loan.phoneNumber.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  _headerFieldRow(isTamil ? "தொலைபேசி" : "Phone", loan.phoneNumber),
+                ],
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPassbookMetric({
-    required String label,
-    required String value,
-    String? sublabel,
-    required Color color,
-    bool isBold = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 2),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isBold ? FontWeight.w900 : FontWeight.bold,
-                color: color,
-              ),
-            ),
-            if (sublabel != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 2),
-                child: Text(
-                  sublabel,
-                  style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.8)),
-                ),
-              ),
-          ],
-        ),
-      ],
     );
   }
 
