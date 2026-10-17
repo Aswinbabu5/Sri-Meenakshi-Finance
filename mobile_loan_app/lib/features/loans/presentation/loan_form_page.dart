@@ -28,7 +28,6 @@ class LoanFormPage extends StatefulWidget {
 enum LoanEntryMode {
   newLoan,
   repeatLoan,
-  editLoan,
 }
 
 class _LoanFormPageState extends State<LoanFormPage> {
@@ -302,8 +301,6 @@ class _LoanFormPageState extends State<LoanFormPage> {
           _tenureDaysController.text = '100';
           _chitFeeController.text = '100';
         }
-      } else if (mode == LoanEntryMode.editLoan) {
-        _bondLookupStatus = null;
       }
     });
   }
@@ -541,54 +538,27 @@ class _LoanFormPageState extends State<LoanFormPage> {
     try {
       final formattedBond = widget.repository.formatBondNumber(_selectedLine, _bondNoController.text.trim());
 
-      // If New Loan or Repeat Loan: Ensure the new bond number is NOT already taken!
-      if (_entryMode == LoanEntryMode.newLoan || _entryMode == LoanEntryMode.repeatLoan) {
-        final existingWithNewBond = widget.repository.getLoanByBond(formattedBond, _selectedLine);
-        if (existingWithNewBond != null) {
-          setState(() => _isSaving = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                isTamil
-                    ? 'தவணை எண் $formattedBond ஏற்கனவே பயன்பாட்டில் உள்ளது! தயவுசெய்து வேறு எண் உள்ளிடவும்.'
-                    : 'Bond number $formattedBond already exists! Please choose another number.',
-              ),
-              backgroundColor: Colors.red,
+      // Ensure the bond number is NOT already taken!
+      final existingWithNewBond = widget.repository.getLoanByBond(formattedBond, _selectedLine);
+      if (existingWithNewBond != null) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isTamil
+                  ? 'தவணை எண் $formattedBond ஏற்கனவே பயன்பாட்டில் உள்ளது! தயவுசெய்து வேறு புதிய தவணை எண் உள்ளிடவும்.'
+                  : 'Bond number $formattedBond already exists! Please choose another new bond number.',
             ),
-          );
-          return;
-        }
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
       }
 
-      LoanModel newLoan;
-      if (_entryMode == LoanEntryMode.editLoan && _retrievedLoan != null && _retrievedLoan!.bondNumber == formattedBond) {
-        await widget.repository.updateMember(
-          loanId: _retrievedLoan!.id,
-          customerName: _partyNameController.text.trim(),
-          fatherOrSpouseName: _fatherNameController.text.trim().isEmpty ? null : _fatherNameController.text.trim(),
-          phoneNumber: _phoneController.text.trim(),
-          address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
-          city: _cityController.text.trim(),
-          photoPath: _photoPath,
-          proofType: _selectedProofType,
-          proofFrontPath: selectedFrontProof,
-          proofBackPath: selectedBackProof,
-          notes: _detailsController.text.trim().isEmpty ? null : _detailsController.text.trim(),
-          lineCode: _selectedLine,
-          bondNumber: formattedBond,
-          loanAmount: _loanAmount,
-          interestAmount: _interestAmount,
-          chitFee: double.tryParse(_chitFeeController.text) ?? 100,
-          tenureDays: _tenureDays,
-          startDate: _startDate,
-          endDate: _endDate,
-        );
-        newLoan = widget.repository.getLoanByBond(formattedBond, _selectedLine) ?? _retrievedLoan!;
-      } else {
-        // Creating NEW loan (Repeat Loan for existing member OR Brand New Customer):
-        // Old loan is never updated or deleted!
-        final customerIdToUse = _selectedExistingCustomer?.id ?? _sourceMemberLoan?.customerId;
-        newLoan = await widget.repository.createLoan(
+      // Creating NEW loan (Repeat Loan for existing member OR Brand New Customer):
+      // Old loan is never updated or deleted!
+      final customerIdToUse = _selectedExistingCustomer?.id ?? _sourceMemberLoan?.customerId;
+      final newLoan = await widget.repository.createLoan(
           lineCode: _selectedLine,
           bondNumber: formattedBond,
           customerId: customerIdToUse,
@@ -608,7 +578,6 @@ class _LoanFormPageState extends State<LoanFormPage> {
           chitFee: double.tryParse(_chitFeeController.text) ?? 100,
           startDate: _startDate,
         );
-      }
 
       // Automatically store photos, proofs, and member details PDF directly into app-finance folders!
       MemberFilesSaveResult? folderResult;
@@ -1023,19 +992,19 @@ class _LoanFormPageState extends State<LoanFormPage> {
     );
   }
 
-  // --- Box 1: Bond Number (3 Modes: New Loan, Repeat Loan / Add ID, Edit Loan) ---
+  // --- Box 1: Bond Number (2 Modes: New Loan, Repeat Loan / Add ID) ---
   Widget _buildTopBondSection(bool isTamil, bool isSmallPhone) {
     return _buildSectionCard(
       title: isTamil ? "தவணை எண் (Bond Number)" : "Bond Number",
       subtitle: isTamil
-          ? "புதிய கடன், மறு கடன் (Add ID), அல்லது கடன் திருத்த முறையை தேர்வு செய்யவும்"
-          : "Choose New Loan, Repeat Loan (Add ID), or Edit Loan",
+          ? "புதிய கடன் அல்லது மறு கடன் (Add ID) முறையை தேர்வு செய்யவும்"
+          : "Choose New Loan or Repeat Loan (Add ID)",
       color: _entryMode == LoanEntryMode.repeatLoan
           ? const Color(0xFFE8F5E9)
-          : (_entryMode == LoanEntryMode.editLoan ? const Color(0xFFFFF3E0) : const Color(0xFFE3F2FD)),
+          : const Color(0xFFE3F2FD),
       borderColor: _entryMode == LoanEntryMode.repeatLoan
           ? Colors.green.shade400
-          : (_entryMode == LoanEntryMode.editLoan ? Colors.orange.shade300 : const Color(0xFF90CAF9)),
+          : const Color(0xFF90CAF9),
       icon: Icons.confirmation_number_outlined,
       trailing: TextButton.icon(
         onPressed: _clearBondLookup,
@@ -1047,7 +1016,7 @@ class _LoanFormPageState extends State<LoanFormPage> {
         style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
       ),
       children: [
-        // Mode Selector: 3 Tabs (New Loan, Repeat Loan / Add ID, Edit Loan)
+        // Mode Selector: 2 Tabs (New Loan, Repeat Loan / Add ID)
         Container(
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
@@ -1068,12 +1037,6 @@ class _LoanFormPageState extends State<LoanFormPage> {
                 label: isTamil ? "மறு கடன் (Add ID)" : "Repeat / Add ID",
                 icon: Icons.person_add_alt_1,
                 isHighlight: true,
-                isTamil: isTamil,
-              ),
-              _buildModeTabItem(
-                mode: LoanEntryMode.editLoan,
-                label: isTamil ? "கடன் திருத்து" : "Edit Loan",
-                icon: Icons.edit_note,
                 isTamil: isTamil,
               ),
             ],
@@ -1114,74 +1077,217 @@ class _LoanFormPageState extends State<LoanFormPage> {
           // Feedback if existing bond is found in New Loan mode
           if (_bondLookupStatus == 'found' && _retrievedLoan != null) ...[
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade400),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 22),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "${_retrievedLoan!.bondNumber} - ${_retrievedLoan!.customerName}",
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1B5E20)),
-                        ),
+            Builder(
+              builder: (ctx) {
+                final customerLoans = widget.repository.getCustomerLoans(_retrievedLoan!.customerId);
+                final isClosed = _retrievedLoan!.status == 'Closed';
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade400, width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    isTamil
-                        ? "ஏற்கனவே உள்ள உறுப்பினர்! மீண்டும் கடன் வாங்க 'மறு கடன் (Add ID)' அழுத்தவும்:"
-                        : "Existing member found! To issue another loan without deleting this one, tap Repeat Loan:",
-                    style: TextStyle(fontSize: 11.5, color: Colors.green.shade900),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: () => _setupRepeatLoanForCurrentMember(_retrievedLoan!),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E7D32),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      // Header Row
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Color(0xFF2E7D32), size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "${_retrievedLoan!.bondNumber} - ${_retrievedLoan!.customerName}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1B5E20)),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isClosed ? Colors.grey.shade300 : Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              isClosed
+                                  ? (isTamil ? "முடிந்தது" : "Closed")
+                                  : (isTamil ? "நடப்பில் உள்ளது" : "Active"),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isClosed ? Colors.grey.shade800 : const Color(0xFF1B5E20),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Financial summary card showing borrowed amount, total, collected, balance
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
                         ),
-                        icon: const Icon(Icons.add_task, size: 16),
-                        label: Text(
-                          isTamil ? "மறு கடன் வழங்க (Add ID)" : "Issue Repeat Loan (Add ID)",
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isTamil ? "கடன் தொகை" : "Borrowed Amt",
+                                    style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700),
+                                  ),
+                                  Text(
+                                    "₹${_retrievedLoan!.loanAmount.toStringAsFixed(0)}",
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isTamil ? "மொத்த தொகை" : "Total Due",
+                                    style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700),
+                                  ),
+                                  Text(
+                                    "₹${_retrievedLoan!.totalAmount.toStringAsFixed(0)}",
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isTamil ? "நிலுவை மீதி" : "Balance Due",
+                                    style: TextStyle(fontSize: 10.5, color: Colors.grey.shade700),
+                                  ),
+                                  Text(
+                                    "₹${_retrievedLoan!.balanceAmount.toStringAsFixed(0)}",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: _retrievedLoan!.balanceAmount > 0 ? Colors.red.shade700 : Colors.green.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _entryMode = LoanEntryMode.editLoan;
-                          });
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          foregroundColor: const Color(0xFF1565C0),
-                          side: const BorderSide(color: Color(0xFF1565C0)),
+
+                      // If customer has multiple loans (e.g., A001 and A002), display chips to switch between them!
+                      if (customerLoans.length > 1) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          isTamil
+                              ? "உறுப்பினரின் அனைத்து கடன்கள் (விவரம் பார்க்க தட்டவும்):"
+                              : "All loans for this member (tap to inspect):",
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green.shade900),
                         ),
-                        icon: const Icon(Icons.edit, size: 15),
-                        label: Text(
-                          isTamil ? "இக்கடனை திருத்து" : "Edit This Loan",
-                          style: const TextStyle(fontSize: 11.5),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: customerLoans.map((l) {
+                            final isCurrent = l.bondNumber == _retrievedLoan!.bondNumber;
+                            return InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _retrievedLoan = l;
+                                  _selectedLine = l.lineCode;
+                                  _bondNoController.text = l.bondNumber.replaceFirst(RegExp(r'^[A-D]-?'), '');
+                                  _populateLoanData(l);
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isCurrent ? const Color(0xFF2E7D32) : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isCurrent ? const Color(0xFF1B5E20) : Colors.green.shade300,
+                                  ),
+                                ),
+                                child: Text(
+                                  "${l.bondNumber} • ₹${l.loanAmount.toStringAsFixed(0)}",
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                                    color: isCurrent ? Colors.white : Colors.green.shade900,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
+                      ],
+
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _setupRepeatLoanForCurrentMember(_retrievedLoan!),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2E7D32),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            icon: const Icon(Icons.person_add_alt_1, size: 16),
+                            label: Text(
+                              isTamil ? "மறு கடன் வழங்க (Add ID)" : "Issue Repeat Loan (Add ID)",
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LoanPassbookPage(
+                                    loan: _retrievedLoan!,
+                                    repository: widget.repository,
+                                  ),
+                                ),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              foregroundColor: const Color(0xFF1B5E20),
+                              side: BorderSide(color: Colors.green.shade600),
+                            ),
+                            icon: const Icon(Icons.menu_book, size: 15),
+                            label: Text(
+                              isTamil ? "தவணை பாஸ்புக்" : "View Passbook",
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ] else if (_bondLookupStatus == 'not_found') ...[
             const SizedBox(height: 10),
@@ -1243,67 +1349,144 @@ class _LoanFormPageState extends State<LoanFormPage> {
           // Retrieved Member Badge Card
           if (_sourceMemberLoan != null) ...[
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade400, width: 1.2),
-                boxShadow: [
-                  BoxShadow(color: Colors.green.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
-                ],
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: 44,
-                      height: 48,
-                      color: Colors.grey.shade100,
-                      child: isValidPhotoPath(_sourceMemberLoan!.photoPath)
-                          ? getSafeImageWidget(_sourceMemberLoan!.photoPath, fit: BoxFit.cover)
-                          : const Icon(Icons.person, color: Color(0xFF2E7D32), size: 28),
-                    ),
+            Builder(
+              builder: (ctx) {
+                final existingLoans = widget.repository.getCustomerLoans(_sourceMemberLoan!.customerId);
+                return Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade400, width: 1.2),
+                    boxShadow: [
+                      BoxShadow(color: Colors.green.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              _sourceMemberLoan!.customerName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1B5E20)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              width: 44,
+                              height: 48,
+                              color: Colors.grey.shade100,
+                              child: isValidPhotoPath(_sourceMemberLoan!.photoPath)
+                                  ? getSafeImageWidget(_sourceMemberLoan!.photoPath, fit: BoxFit.cover)
+                                  : const Icon(Icons.person, color: Color(0xFF2E7D32), size: 28),
                             ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
-                              child: Text(
-                                "Old: ${_sourceMemberLoan!.bondNumber}",
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green.shade900),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      _sourceMemberLoan!.customerName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1B5E20)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
+                                      child: Text(
+                                        "Old ID: ${_sourceMemberLoan!.bondNumber}",
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.green.shade900),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "📞 ${_sourceMemberLoan!.phoneNumber}  •  📍 ${_sourceMemberLoan!.city ?? 'மதுரை'}",
+                                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade800),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  isTamil
+                                      ? "முந்தைய கடன்: ${_sourceMemberLoan!.bondNumber} • கடன் தொகை: ₹${_sourceMemberLoan!.loanAmount.toStringAsFixed(0)} • மீதி: ₹${_sourceMemberLoan!.balanceAmount.toStringAsFixed(0)}"
+                                      : "Previous Loan: ${_sourceMemberLoan!.bondNumber} • Borrowed: ₹${_sourceMemberLoan!.loanAmount.toStringAsFixed(0)} • Balance: ₹${_sourceMemberLoan!.balanceAmount.toStringAsFixed(0)}",
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (existingLoans.length > 1) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          isTamil ? "முந்தைய கடன்கள் (மாற்ற தட்டவும்):" : "Previous loans for member (tap to select):",
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.green.shade800),
+                        ),
+                        const SizedBox(height: 3),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: existingLoans.map((l) {
+                            final isSelected = l.bondNumber == _sourceMemberLoan!.bondNumber;
+                            return InkWell(
+                              onTap: () => _setupRepeatLoanForCurrentMember(l),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? Colors.green.shade700 : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.green.shade400),
+                                ),
+                                child: Text(
+                                  "${l.bondNumber} (₹${l.loanAmount.toStringAsFixed(0)})",
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    color: isSelected ? Colors.white : Colors.green.shade900,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          "📞 ${_sourceMemberLoan!.phoneNumber}  •  📍 ${_sourceMemberLoan!.city ?? 'மதுரை'}",
-                          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade800),
-                        ),
-                        Text(
-                          isTamil
-                              ? "✓ உறுப்பினர் விவரங்கள், புகைப்படம் மற்றும் ஆவணங்கள் இணைக்கப்பட்டன"
-                              : "✓ Member details, photo & proofs attached",
-                          style: const TextStyle(fontSize: 10.5, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
+                            );
+                          }).toList(),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isTamil
+                                ? "✓ உறுப்பினர் விவரங்கள் & ஆவணங்கள் பெறப்பட்டன"
+                                : "✓ Member details & proofs attached",
+                            style: const TextStyle(fontSize: 10.5, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LoanPassbookPage(
+                                    loan: _sourceMemberLoan!,
+                                    repository: widget.repository,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.menu_book, size: 14, color: Color(0xFF1B5E20)),
+                            label: Text(
+                              isTamil ? "பாஸ்புக் காண்க" : "View Passbook",
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF1B5E20), fontWeight: FontWeight.bold),
+                            ),
+                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
           const SizedBox(height: 12),
@@ -1346,70 +1529,14 @@ class _LoanFormPageState extends State<LoanFormPage> {
                 Expanded(
                   child: Text(
                     isTamil
-                        ? "புதிய கடன் '$_selectedLine${_bondNoController.text.trim()}' உருவாக்கப்படும். பழைய கடன் '${_sourceMemberLoan?.bondNumber ?? _existingMemberBondController.text}' அழியாது."
-                        : "New loan '$_selectedLine${_bondNoController.text.trim()}' will be created. Previous loan '${_sourceMemberLoan?.bondNumber ?? _existingMemberBondController.text}' will not be deleted.",
+                        ? "புதிய கடன் '$_selectedLine${_bondNoController.text.trim()}' புதிய கடன் தொகையுடன் உருவாக்கப்படும். பழைய கடன் '${_sourceMemberLoan?.bondNumber ?? _existingMemberBondController.text}' (ரூ.${_sourceMemberLoan?.loanAmount.toStringAsFixed(0) ?? ''}) மாற்றமின்றி பாதுகாப்பாக இருக்கும்."
+                        : "New loan '$_selectedLine${_bondNoController.text.trim()}' will be created with new borrowed amount. Previous loan '${_sourceMemberLoan?.bondNumber ?? _existingMemberBondController.text}' (₹${_sourceMemberLoan?.loanAmount.toStringAsFixed(0) ?? ''}) will NOT be modified or deleted.",
                     style: TextStyle(fontSize: 11, color: Colors.green.shade900, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-
-        // --- Mode 3: Edit Existing Loan ---
-        if (_entryMode == LoanEntryMode.editLoan) ...[
-          Text(
-            isTamil
-                ? "ஏற்கனவே உள்ள கடன் விவரங்களை திருத்த, தவணை எண்ணை தேடவும்."
-                : "Search existing bond number to edit its loan and member details.",
-            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: _buildLineDropdown(isTamil),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 3,
-                child: _buildBondNoTextField(
-                  isTamil: isTamil,
-                  labelText: isTamil ? "தவணை எண் *" : "Bond No *",
-                  hintText: '001',
-                  onSearch: () => _onBondNumberChanged(_bondNoController.text),
-                  onChanged: (val) => _onBondNumberChanged(val),
-                ),
-              ),
-            ],
-          ),
-          if (_retrievedLoan != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade300),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.edit, color: Colors.orange, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isTamil
-                          ? "தவணை எண் '${_retrievedLoan!.bondNumber} - ${_retrievedLoan!.customerName}' திருத்தப்படுகிறது. சேமிக்கும்போது இந்த கடன் புதுப்பிக்கப்படும்."
-                          : "Editing '${_retrievedLoan!.bondNumber} - ${_retrievedLoan!.customerName}'. Changes will update this loan.",
-                      style: TextStyle(fontSize: 11.5, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ],
     );
@@ -1635,6 +1762,16 @@ class _LoanFormPageState extends State<LoanFormPage> {
                 decoration: InputDecoration(
                   labelText: isTamil ? "கடன் தொகை" : "Loan Amount",
                   prefixText: "₹ ",
+                  helperText: _entryMode == LoanEntryMode.repeatLoan
+                      ? (isTamil
+                          ? "புதிய தவணைக்கான கடன் தொகை (பழைய கடன் தொகை மாறாது)"
+                          : "New loan borrowed amount for new ID (old loan unchanged)")
+                      : null,
+                  helperStyle: TextStyle(
+                    fontSize: 10.5,
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.bold,
+                  ),
                   filled: true,
                   fillColor: Colors.white,
                   isDense: true,
