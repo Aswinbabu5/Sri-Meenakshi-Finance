@@ -156,6 +156,106 @@ class _ComputerFoldersExportDialogState extends State<ComputerFoldersExportDialo
               ),
               const SizedBox(height: 12),
 
+              // Local Folder Connection Card on Web
+              if (kIsWeb) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppFinanceFolderService.cachedDirectoryName != null
+                        ? const Color(0xFFF0FDF4)
+                        : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppFinanceFolderService.cachedDirectoryName != null
+                          ? const Color(0xFF86EFAC)
+                          : const Color(0xFFBFDBFE),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        AppFinanceFolderService.cachedDirectoryName != null
+                            ? Icons.check_circle
+                            : Icons.drive_folder_upload,
+                        size: 22,
+                        color: AppFinanceFolderService.cachedDirectoryName != null
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              AppFinanceFolderService.cachedDirectoryName != null
+                                  ? (isTamil
+                                      ? 'இணைக்கப்பட்ட கோப்புறை: ${AppFinanceFolderService.cachedDirectoryName}'
+                                      : 'Connected: ${AppFinanceFolderService.cachedDirectoryName}')
+                                  : (isTamil
+                                      ? 'கணினி கோப்புறை (Local Folder) தேர்வு'
+                                      : 'Local "app-finance" Folder'),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                                color: AppFinanceFolderService.cachedDirectoryName != null
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFF1E40AF),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              AppFinanceFolderService.cachedDirectoryName != null
+                                  ? (isTamil
+                                      ? 'கோப்புகள் நேரடியாக member-photo, member-proof, member-details இல் சேமிக்கப்படும்'
+                                      : 'Files save directly into member-photo, member-proof, and member-details')
+                                  : (isTamil
+                                      ? 'உங்கள் கணினியில் உள்ள app-finance கோப்புறையை தேர்வு செய்தால் படங்கள் & PDF நேராக சேமிக்கப்படும்'
+                                      : 'Select your local app-finance folder to save photos & PDFs directly to disk'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: AppFinanceFolderService.cachedDirectoryName != null
+                              ? const Color(0xFF15803D)
+                              : const Color(0xFF1D4ED8),
+                          side: BorderSide(
+                            color: AppFinanceFolderService.cachedDirectoryName != null
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFF2563EB),
+                          ),
+                        ),
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: Text(
+                          AppFinanceFolderService.cachedDirectoryName != null
+                              ? (isTamil ? 'மாற்ற' : 'Change')
+                              : (isTamil ? 'தேர்வு' : 'Select'),
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _isExporting
+                            ? null
+                            : () async {
+                                final handle = await AppFinanceFolderService.pickAppFinanceDirectory();
+                                if (handle != null && mounted) {
+                                  setState(() {});
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               // Filter Line Selector
               if (!_isExporting && _result == null) ...[
                 Row(

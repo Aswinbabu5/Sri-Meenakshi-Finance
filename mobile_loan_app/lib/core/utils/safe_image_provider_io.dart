@@ -39,6 +39,10 @@ Uint8List? getSafeImageBytes(String? path) {
   return null;
 }
 
+Future<Uint8List?> getSafeImageBytesAsync(String? path) async {
+  return getSafeImageBytes(path);
+}
+
 ImageProvider? getSafeImageProvider(String? path) {
   if (path == null || path.trim().isEmpty) return null;
   if (path.startsWith('data:')) {

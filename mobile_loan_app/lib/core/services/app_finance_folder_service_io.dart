@@ -61,10 +61,15 @@ class AppFinanceFolderService {
         .replaceAll(RegExp(r'_+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
   }
+  static bool get isFileSystemAccessSupported => false;
+  static dynamic get cachedDirectoryHandle => null;
+  static String? get cachedDirectoryName => null;
+  static void clearCachedDirectory() {}
+  static Future<dynamic> pickAppFinanceDirectory() async => null;
 
   /// Determines the main `app-finance` directory across Windows, macOS, Linux, Android, iOS.
   /// - Windows: C:\app-finance (or SystemDrive\app-finance)
-  /// - macOS: ~/app-finance (/Users/<user>/app-finance)
+  /// - macOS: ~/app-finance (`/Users/<user>/app-finance`)
   /// - Linux: ~/app-finance
   /// - Android: /storage/emulated/0/app-finance (or app documents fallback)
   /// - iOS: Documents/app-finance

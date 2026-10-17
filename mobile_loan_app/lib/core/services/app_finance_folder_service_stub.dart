@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import '../models/loan_model.dart';
 import '../models/collection_model.dart';
 import 'loan_repository.dart';
@@ -55,6 +54,12 @@ class AppFinanceFolderService {
         .replaceAll(RegExp(r'_+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
   }
+
+  static bool get isFileSystemAccessSupported => false;
+  static dynamic get cachedDirectoryHandle => null;
+  static String? get cachedDirectoryName => null;
+  static void clearCachedDirectory() {}
+  static Future<dynamic> pickAppFinanceDirectory() async => null;
 
   static Future<String?> getAppFinanceRootPath() async => null;
   static Future<String?> getMemberPhotoFolderPath() async => null;

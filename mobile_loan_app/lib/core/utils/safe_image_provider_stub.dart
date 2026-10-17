@@ -17,3 +17,5 @@ Widget getSafeImageWidget(
 String? getPhotoBase64OrUri(String? path) => null;
 
 Uint8List? getSafeImageBytes(String? path) => null;
+
+Future<Uint8List?> getSafeImageBytesAsync(String? path) async => null;
